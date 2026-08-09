@@ -55,7 +55,7 @@ class LoginActivity : AppCompatActivity() {
             },
             onError = { e ->
                 loginButton.isEnabled = true
-                statusText.text = "接続エラー: ${e.message}"
+                statusText.text = "接続エラー: ${Api.friendlyMessage(e)}"
                 Toast.makeText(this, "サーバーに接続できませんでした", Toast.LENGTH_LONG).show()
             }
         )

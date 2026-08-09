@@ -99,7 +99,7 @@ class GoalFragment : Fragment() {
                 if (!isAdded) return@async
                 swipe.isRefreshing = false
                 empty.visibility = View.VISIBLE
-                empty.text = "読み込みエラー: ${e.message}"
+                empty.text = "読み込みエラー: ${Api.friendlyMessage(e)}"
             }
         )
     }
@@ -298,7 +298,7 @@ class GoalFragment : Fragment() {
             },
             onError = { e ->
                 if (!isAdded) return@async
-                Toast.makeText(requireContext(), "追加に失敗: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "追加に失敗: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
             }
         )
     }
@@ -317,7 +317,7 @@ class GoalFragment : Fragment() {
             },
             onError = { e ->
                 if (!isAdded) return@async
-                Toast.makeText(requireContext(), "更新に失敗: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "更新に失敗: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
             }
         )
     }
@@ -339,7 +339,7 @@ class GoalFragment : Fragment() {
                     onSuccess = { if (isAdded) load() },
                     onError = { e ->
                         if (!isAdded) return@async
-                        Toast.makeText(requireContext(), "削除に失敗: ${e.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(requireContext(), "削除に失敗: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
                     }
                 )
             }

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -15,6 +16,7 @@ import dev.togar.dynasched.notify.AlarmScheduler
 import dev.togar.dynasched.ui.GoalFragment
 import dev.togar.dynasched.ui.HobbyFragment
 import dev.togar.dynasched.ui.SettingsFragment
+import dev.togar.dynasched.ui.TodayFragment
 import dev.togar.dynasched.update.UpdateChecker
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -42,18 +44,39 @@ class MainActivity : AppCompatActivity() {
         val nav = findViewById<BottomNavigationView>(R.id.bottomNav)
         nav.setOnItemSelectedListener { item ->
             val fragment: Fragment = when (item.itemId) {
+                R.id.nav_today -> TodayFragment()
                 R.id.nav_single -> HobbyFragment()
                 R.id.nav_goal -> GoalFragment()
                 R.id.nav_settings -> SettingsFragment()
-                else -> HobbyFragment()
+                else -> TodayFragment()
             }
             showFragment(fragment)
             true
         }
 
         if (savedInstanceState == null) {
-            nav.selectedItemId = R.id.nav_single
+            nav.selectedItemId = R.id.nav_today
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // トークンが切れた時は、各画面がエラーを出す前にログインへ戻す
+        Api.onUnauthorized = {
+            if (!isFinishing && !isDestroyed) {
+                Prefs.logout(this)
+                Toast.makeText(this, "ログインの有効期限が切れました", Toast.LENGTH_LONG).show()
+                val intent = Intent(this, LoginActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                finish()
+            }
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Api.onUnauthorized = null
     }
 
     /** 今日の予定を取得してローカル通知を予約し直す（バックグラウンド） */

@@ -64,7 +64,7 @@ class NotifyActionReceiver : BroadcastReceiver() {
                 }
                 SuggestWidgetProvider.updateAll(appCtx)
             } catch (e: Exception) {
-                toast(appCtx, "記録に失敗: ${e.message}")
+                toast(appCtx, "記録に失敗: ${Api.friendlyMessage(e)}")
             } finally {
                 pending.finish()
             }

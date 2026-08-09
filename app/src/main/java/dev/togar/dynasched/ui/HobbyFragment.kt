@@ -102,7 +102,7 @@ class HobbyFragment : Fragment() {
                 if (!isAdded) return@async
                 swipe.isRefreshing = false
                 empty.visibility = View.VISIBLE
-                empty.text = "読み込みエラー: ${e.message}"
+                empty.text = "読み込みエラー: ${Api.friendlyMessage(e)}"
             }
         )
     }
@@ -114,7 +114,7 @@ class HobbyFragment : Fragment() {
             onSuccess = { if (isAdded) load() },
             onError = { e ->
                 if (!isAdded) return@async
-                Toast.makeText(requireContext(), "更新に失敗: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "更新に失敗: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
                 load()
             }
         )
@@ -195,7 +195,7 @@ class HobbyFragment : Fragment() {
                     },
                     onError = { e ->
                         if (!isAdded) return@async
-                        Toast.makeText(requireContext(), "更新に失敗: ${e.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(requireContext(), "更新に失敗: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
                     }
                 )
             }
@@ -229,7 +229,7 @@ class HobbyFragment : Fragment() {
             onSuccess = { if (isAdded) load() },
             onError = { e ->
                 if (!isAdded) return@async
-                Toast.makeText(requireContext(), "削除に失敗: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "削除に失敗: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
             }
         )
     }

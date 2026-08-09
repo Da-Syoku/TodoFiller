@@ -1,5 +1,6 @@
 package dev.togar.dynasched.api
 
+import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -69,5 +70,33 @@ data class ScheduledEvent(
             isCompleted = o.optInt("is_completed", 0) == 1,
             goalId = o.optLong("goal_id", 0L).let { if (it > 0L) it else null }
         )
+
+        /** 端末内キャッシュ用のシリアライズ（サーバーのJSONと同じ形） */
+        fun toJsonArray(events: List<ScheduledEvent>): String {
+            val arr = JSONArray()
+            for (ev in events) {
+                arr.put(
+                    JSONObject()
+                        .put("id", ev.id)
+                        .put("title", ev.title)
+                        .put("start_datetime", ev.startDatetime)
+                        .put("end_datetime", ev.endDatetime)
+                        .put("event_type", ev.eventType)
+                        .put("is_completed", if (ev.isCompleted) 1 else 0)
+                        .put("goal_id", ev.goalId ?: 0L)
+                )
+            }
+            return arr.toString()
+        }
+
+        /** 壊れたキャッシュで落ちないよう、失敗時は空リストを返す */
+        fun fromJsonArray(json: String): List<ScheduledEvent> = try {
+            val arr = JSONArray(json)
+            val list = ArrayList<ScheduledEvent>(arr.length())
+            for (i in 0 until arr.length()) list.add(from(arr.getJSONObject(i)))
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 }

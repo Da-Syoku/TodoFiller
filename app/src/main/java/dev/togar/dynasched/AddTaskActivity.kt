@@ -93,7 +93,7 @@ class AddTaskActivity : AppCompatActivity() {
                 },
                 onError = { e ->
                     saveButton.isEnabled = true
-                    Toast.makeText(this, "追加に失敗: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "追加に失敗: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
                 }
             )
         }

@@ -24,8 +24,22 @@ class ApiException(val code: Int, message: String) : Exception(message)
  */
 object Api {
     private val base = BuildConfig.API_BASE_URL.trimEnd('/')
-    private val io = Executors.newSingleThreadExecutor()
+
+    /**
+     * 単一スレッドだと、スケジューラ実行(最大90秒)の間に他の画面の通信が全部詰まる。
+     * 数本のプールにして、遅い呼び出しが他をブロックしないようにする。
+     */
+    private val io = Executors.newFixedThreadPool(3) { r ->
+        Thread(r, "dynasched-api").apply { isDaemon = true }
+    }
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * トークン失効(401)を検知した時に呼ばれる。MainActivity がログイン画面への
+     * 誘導を仕掛ける。メインスレッドで、1回の失効につき1度だけ呼ぶ。
+     */
+    @Volatile var onUnauthorized: (() -> Unit)? = null
+    @Volatile private var unauthorizedNotified = false
 
     /** バックグラウンドで処理し、結果/失敗をメインスレッドへ返す簡易ヘルパー */
     fun <T> async(
@@ -36,12 +50,37 @@ object Api {
         io.execute {
             try {
                 val result = work()
+                unauthorizedNotified = false
                 mainHandler.post { onSuccess(result) }
             } catch (e: Exception) {
-                appContext?.let { reportError(it, "api", e) }
+                if (e is ApiException && e.code == 401) {
+                    // 失効は想定内なのでサーバーへは報告しない（ログが埋まるだけ）
+                    if (!unauthorizedNotified) {
+                        unauthorizedNotified = true
+                        mainHandler.post { onUnauthorized?.invoke() }
+                    }
+                } else {
+                    appContext?.let { reportError(it, "api", e) }
+                }
                 mainHandler.post { onError(e) }
             }
         }
+    }
+
+    /**
+     * 例外を利用者に見せられる日本語にする。
+     * 生の `failed to connect to api.togar.dev/... (port 443)` を出さないため。
+     */
+    fun friendlyMessage(e: Exception): String = when {
+        e is ApiException && e.code == 401 -> "ログインの有効期限が切れました"
+        e is ApiException && e.code == 404 -> "対象が見つかりませんでした"
+        e is ApiException && e.code in 500..599 -> "サーバーが応答できない状態です"
+        e is ApiException -> "サーバーエラー (${e.code})"
+        e is java.net.SocketTimeoutException -> "通信がタイムアウトしました"
+        e is java.net.UnknownHostException -> "ネットワークに接続されていません"
+        e is java.net.ConnectException -> "サーバーに接続できません"
+        e is java.io.IOException -> "通信に失敗しました"
+        else -> e.message ?: "不明なエラー"
     }
 
     // ---- エラー報告 ----

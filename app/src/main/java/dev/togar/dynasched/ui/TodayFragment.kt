@@ -10,6 +10,7 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import dev.togar.dynasched.Prefs
 import dev.togar.dynasched.R
 import dev.togar.dynasched.api.Api
 import dev.togar.dynasched.api.ScheduledEvent
@@ -25,6 +26,9 @@ class TodayFragment : Fragment() {
     private lateinit var swipe: SwipeRefreshLayout
     private lateinit var header: TextView
     private lateinit var empty: TextView
+
+    /** キャッシュを出しただけで、まだサーバーから取れていない状態か */
+    private var showingCache = false
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -42,6 +46,9 @@ class TodayFragment : Fragment() {
         recycler.adapter = adapter
 
         swipe.setOnRefreshListener { load() }
+
+        // 通信を待たずに前回の内容を出す（圏外・低速回線でも即座に今日の予定が見える）
+        showCache()
         return root
     }
 
@@ -53,6 +60,17 @@ class TodayFragment : Fragment() {
     private fun today(): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
+    /** 保存済みスナップショットがあれば先に描画する */
+    private fun showCache() {
+        val cached = Prefs.scheduleCache(requireContext().applicationContext, today()) ?: return
+        val events = ScheduledEvent.fromJsonArray(cached)
+        if (events.isEmpty()) return
+        adapter.submit(events)
+        empty.visibility = View.GONE
+        showingCache = true
+        header.text = "今日の予定（前回の内容）"
+    }
+
     private fun load() {
         swipe.isRefreshing = true
         val todayStr = today()
@@ -62,20 +80,31 @@ class TodayFragment : Fragment() {
             onSuccess = { all ->
                 if (!isAdded) return@async
                 swipe.isRefreshing = false
-                // 7日分のうち今日の分だけ抽出
+                showingCache = false
+                header.text = "今日の予定"
+                // 7日分のうち今日の分だけ表示する
                 val todays = all.filter { it.isOnDate(todayStr) }
                     .sortedBy { it.startDatetime }
                 adapter.submit(todays)
                 empty.visibility = if (todays.isEmpty()) View.VISIBLE else View.GONE
                 empty.text = "今日の予定はありません"
-                // 今日の予定に通知を予約（閉じていても鳴る）
-                AlarmScheduler.scheduleAll(ctx, todays)
+                Prefs.saveScheduleCache(ctx, todayStr, ScheduledEvent.toJsonArray(todays))
+                // 通知は取得できた全期間ぶんを予約する（今日だけにすると翌日以降が鳴らなくなる）
+                AlarmScheduler.scheduleAll(ctx, all)
             },
             onError = { e ->
                 if (!isAdded) return@async
                 swipe.isRefreshing = false
-                empty.visibility = View.VISIBLE
-                empty.text = "読み込みエラー: ${e.message}"
+                if (showingCache) {
+                    // 手元に出せる内容があるので消さず、状態だけ伝える
+                    header.text = "今日の予定（オフライン表示）"
+                    Toast.makeText(
+                        requireContext(), Api.friendlyMessage(e), Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    empty.visibility = View.VISIBLE
+                    empty.text = Api.friendlyMessage(e)
+                }
             }
         )
     }
@@ -91,7 +120,9 @@ class TodayFragment : Fragment() {
             },
             onError = { e ->
                 if (!isAdded) return@async
-                Toast.makeText(requireContext(), "失敗: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    requireContext(), "失敗: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG
+                ).show()
             }
         )
     }

@@ -7,8 +7,6 @@ import android.content.Intent
 import android.os.Build
 import dev.togar.dynasched.Prefs
 import dev.togar.dynasched.api.ScheduledEvent
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
  * 端末内の AlarmManager で各予定の開始時刻にローカル通知を予約する。
@@ -106,40 +104,12 @@ object AlarmScheduler {
             }
         }
         // 再起動後に再登録できるようキャッシュ
-        Prefs.saveCachedEvents(ctx, toJson(events))
+        Prefs.saveCachedEvents(ctx, ScheduledEvent.toJsonArray(events))
     }
 
     /** 再起動時など、キャッシュ済みの予定から再登録する */
     fun rescheduleFromCache(ctx: Context) {
         val json = Prefs.cachedEvents(ctx) ?: return
-        scheduleAll(ctx, fromJson(json))
-    }
-
-    // ---- キャッシュ用の簡易シリアライズ ----
-
-    private fun toJson(events: List<ScheduledEvent>): String {
-        val arr = JSONArray()
-        for (ev in events) {
-            arr.put(
-                JSONObject()
-                    .put("id", ev.id)
-                    .put("title", ev.title)
-                    .put("start_datetime", ev.startDatetime)
-                    .put("end_datetime", ev.endDatetime)
-                    .put("event_type", ev.eventType)
-                    .put("is_completed", if (ev.isCompleted) 1 else 0)
-                    .put("goal_id", ev.goalId ?: 0L)
-            )
-        }
-        return arr.toString()
-    }
-
-    private fun fromJson(json: String): List<ScheduledEvent> {
-        val arr = JSONArray(json)
-        val list = ArrayList<ScheduledEvent>(arr.length())
-        for (i in 0 until arr.length()) {
-            list.add(ScheduledEvent.from(arr.getJSONObject(i)))
-        }
-        return list
+        scheduleAll(ctx, ScheduledEvent.fromJsonArray(json))
     }
 }

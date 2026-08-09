@@ -79,7 +79,7 @@ class SettingsFragment : Fragment() {
             },
             onError = { e ->
                 if (!isAdded) return@async
-                Toast.makeText(requireContext(), "失敗: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "失敗: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
             }
         )
     }
@@ -96,7 +96,7 @@ class SettingsFragment : Fragment() {
             },
             onError = { e ->
                 if (!isAdded) return@async
-                Toast.makeText(requireContext(), "失敗: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "失敗: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
             }
         )
     }

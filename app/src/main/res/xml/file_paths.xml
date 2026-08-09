@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- getExternalFilesDir(null) 配下（更新APKの保存先）を共有可能にする -->
+    <external-files-path name="update" path="." />
+    <files-path name="internal" path="." />
+    <cache-path name="cache" path="." />
+</paths>

@@ -75,6 +75,7 @@ class SettingsFragment : Fragment() {
             onSuccess = { all ->
                 if (!isAdded) return@async
                 AlarmScheduler.scheduleAll(ctx, all)
+                dev.togar.dynasched.integration.StudySync.send(ctx, all)
                 Toast.makeText(requireContext(), "通知を再設定しました", Toast.LENGTH_SHORT).show()
             },
             onError = { e ->

@@ -14,6 +14,7 @@ import dev.togar.dynasched.Prefs
 import dev.togar.dynasched.R
 import dev.togar.dynasched.api.Api
 import dev.togar.dynasched.api.ScheduledEvent
+import dev.togar.dynasched.integration.StudySync
 import dev.togar.dynasched.notify.AlarmScheduler
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -91,6 +92,7 @@ class TodayFragment : Fragment() {
                 Prefs.saveScheduleCache(ctx, todayStr, ScheduledEvent.toJsonArray(todays))
                 // 通知は取得できた全期間ぶんを予約する（今日だけにすると翌日以降が鳴らなくなる）
                 AlarmScheduler.scheduleAll(ctx, all)
+                StudySync.send(ctx, all)   // ドパチルへ学習予定を全置換で渡す
             },
             onError = { e ->
                 if (!isAdded) return@async

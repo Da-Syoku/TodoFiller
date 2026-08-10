@@ -11,6 +11,10 @@
     <!-- オンライン更新：ダウンロードしたAPKをインストールするために必要 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- ドパチル(com.dopachiru)へ学習予定を渡すための署名レベル権限。
+         同じ鍵で署名されたアプリしか名乗れない。ドパチル未導入なら単に付与されないだけ。 -->
+    <uses-permission android:name="com.dopachiru.permission.SYNC_STUDY" />
+
     <application
         android:name=".App"
         android:allowBackup="true"

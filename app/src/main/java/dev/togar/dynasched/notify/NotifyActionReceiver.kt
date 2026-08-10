@@ -8,8 +8,8 @@ import androidx.core.app.NotificationManagerCompat
 import dev.togar.dynasched.Prefs
 import dev.togar.dynasched.api.Api
 import dev.togar.dynasched.api.ScheduledEvent
+import dev.togar.dynasched.integration.StudySync
 import dev.togar.dynasched.widget.SuggestWidgetProvider
-import org.json.JSONArray
 
 /**
  * フィードバック通知のアクションボタンを処理する。
@@ -62,6 +62,8 @@ class NotifyActionReceiver : BroadcastReceiver() {
                         if (earlyFinish) suggestNext(appCtx, eventId)
                     }
                 }
+                // 終わった予定を手元から外し、ドパチルの制限を即座に解く
+                releaseWindow(appCtx, eventId)
                 SuggestWidgetProvider.updateAll(appCtx)
             } catch (e: Exception) {
                 toast(appCtx, "記録に失敗: ${Api.friendlyMessage(e)}")
@@ -87,22 +89,27 @@ class NotifyActionReceiver : BroadcastReceiver() {
         }
     }
 
+    /**
+     * 終わった予定を端末内キャッシュから外し、残りをドパチルへ送り直す。
+     * 早期完了のとき、次の判定を待たずにブロックが解ける。
+     */
+    private fun releaseWindow(ctx: Context, eventId: Long) {
+        val json = Prefs.cachedEvents(ctx) ?: return
+        val remaining = ScheduledEvent.fromJsonArray(json).filter { it.id != eventId }
+        Prefs.saveCachedEvents(ctx, ScheduledEvent.toJsonArray(remaining))
+        StudySync.send(ctx, remaining)
+    }
+
     /** キャッシュ済み予定から、完了したイベントを除く次の予定開始までの分数 */
     private fun freeMinutes(ctx: Context, excludeId: Long): Int {
         val json = Prefs.cachedEvents(ctx) ?: return 60
-        return try {
-            val arr = JSONArray(json)
-            val now = System.currentTimeMillis()
-            var next = Long.MAX_VALUE
-            for (i in 0 until arr.length()) {
-                val ev = ScheduledEvent.from(arr.getJSONObject(i))
-                if (ev.isCompleted || ev.id == excludeId) continue
-                val t = ev.startAsDate()?.time ?: continue
-                if (t > now && t < next) next = t
-            }
-            if (next == Long.MAX_VALUE) 60
-            else ((next - now) / 60000L).toInt().coerceIn(15, 240)
-        } catch (e: Exception) { 60 }
+        val now = System.currentTimeMillis()
+        val next = ScheduledEvent.fromJsonArray(json)
+            .filter { !it.isCompleted && it.id != excludeId }
+            .mapNotNull { it.startAsDate()?.time }
+            .filter { it > now }
+            .minOrNull() ?: return 60
+        return ((next - now) / 60000L).toInt().coerceIn(15, 240)
     }
 
     private fun toast(ctx: Context, msg: String) {

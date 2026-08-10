@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import dev.togar.dynasched.api.Api
+import dev.togar.dynasched.integration.StudySync
 import dev.togar.dynasched.notify.AlarmScheduler
 import dev.togar.dynasched.ui.GoalFragment
 import dev.togar.dynasched.ui.HobbyFragment
@@ -85,7 +86,10 @@ class MainActivity : AppCompatActivity() {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         Api.async(
             work = { Api.getSchedule(ctx, today) },
-            onSuccess = { events -> AlarmScheduler.scheduleAll(ctx, events) },
+            onSuccess = { events ->
+                AlarmScheduler.scheduleAll(ctx, events)
+                StudySync.send(ctx, events)   // ドパチルへ学習予定を全置換で渡す
+            },
             onError = { /* 通信できない時は何もしない */ }
         )
     }

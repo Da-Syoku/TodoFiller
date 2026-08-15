@@ -88,4 +88,34 @@ object Prefs {
     fun setWidgetLoc(ctx: Context, loc: String) {
         sp(ctx).edit().putString("widget_loc", if (loc == "out") "out" else "home").apply()
     }
+
+    /**
+     * 読み書きする端末カレンダーのID。未設定(-1)なら主カレンダーを自動で選ぶ。
+     * 仕事用など複数アカウントがある端末で、意図しない方を読まないための逃げ道。
+     */
+    fun calendarId(ctx: Context): Long? =
+        sp(ctx).getLong("calendar_id", -1L).let { if (it >= 0) it else null }
+
+    fun setCalendarId(ctx: Context, id: Long) {
+        sp(ctx).edit().putLong("calendar_id", id).apply()
+    }
+
+    /**
+     * 端末内完結で動くか（true）、これまで通りサーバーに問い合わせるか（false）。
+     *
+     * 移植で何か壊れた時に戻れるよう、両方の方式を残して設定で切り替える。
+     * 既定はサーバー方式のまま。取り込みを済ませてから自分で切り替える。
+     */
+    fun localMode(ctx: Context): Boolean = sp(ctx).getBoolean("local_mode", false)
+
+    fun setLocalMode(ctx: Context, on: Boolean) {
+        sp(ctx).edit().putBoolean("local_mode", on).apply()
+    }
+
+    /** サーバーからの初回取り込みが済んでいるか（二重取り込みを防ぐ） */
+    fun imported(ctx: Context): Boolean = sp(ctx).getBoolean("imported", false)
+
+    fun setImported(ctx: Context, done: Boolean) {
+        sp(ctx).edit().putBoolean("imported", done).apply()
+    }
 }

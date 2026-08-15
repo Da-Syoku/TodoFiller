@@ -8,6 +8,7 @@ import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import dev.togar.dynasched.data.Repo
 import dev.togar.dynasched.api.Api
 import dev.togar.dynasched.ui.ColorPaletteView
 import dev.togar.dynasched.ui.DurationPickerView
@@ -86,7 +87,7 @@ class AddTaskActivity : AppCompatActivity() {
             val ctx = applicationContext
             val pid = if (parentId != null && parentId >= 0) parentId else null
             Api.async(
-                work = { Api.addHobby(ctx, name, pid, total, priority, location, note, color) },
+                work = { Repo.current(ctx).addHobby(ctx, name, pid, total, priority, location, note, color) },
                 onSuccess = {
                     Toast.makeText(this, "追加しました", Toast.LENGTH_SHORT).show()
                     finish()

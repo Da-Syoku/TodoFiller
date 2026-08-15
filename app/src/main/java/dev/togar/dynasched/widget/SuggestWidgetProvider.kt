@@ -7,12 +7,13 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
+import dev.togar.dynasched.data.Repo
 import dev.togar.dynasched.LoginActivity
+import dev.togar.dynasched.MainActivity
 import dev.togar.dynasched.Prefs
 import dev.togar.dynasched.R
 import dev.togar.dynasched.api.Api
 import dev.togar.dynasched.api.ScheduledEvent
-import org.json.JSONArray
 
 /**
  * ホーム画面ウィジェット。現在の場所（家/外・手動切替）と次の予定までの空き時間から、
@@ -27,19 +28,7 @@ class SuggestWidgetProvider : AppWidgetProvider() {
         /** キャッシュ済み予定から「次の未完了予定開始までの分数」を出す（無ければ60分） */
         private fun freeMinutes(ctx: Context): Int {
             val json = Prefs.cachedEvents(ctx) ?: return 60
-            return try {
-                val arr = JSONArray(json)
-                val now = System.currentTimeMillis()
-                var next = Long.MAX_VALUE
-                for (i in 0 until arr.length()) {
-                    val ev = ScheduledEvent.from(arr.getJSONObject(i))
-                    if (ev.isCompleted) continue
-                    val t = ev.startAsDate()?.time ?: continue
-                    if (t > now && t < next) next = t
-                }
-                if (next == Long.MAX_VALUE) 60
-                else ((next - now) / 60000L).toInt().coerceIn(15, 240)
-            } catch (e: Exception) { 60 }
+            return ScheduledEvent.freeMinutesUntilNext(ScheduledEvent.fromJsonArray(json))
         }
 
         fun updateAll(ctx: Context) {
@@ -54,12 +43,12 @@ class SuggestWidgetProvider : AppWidgetProvider() {
                 val locLabel = if (loc == "out") "外" else "家"
                 views.setTextViewText(R.id.widgetTitle, "いまできること（$locLabel・${min}分）")
                 try {
-                    val items = Api.getSuggestions(ctx, loc, min, 3)
+                    val items = Repo.current(ctx).getSuggestions(ctx, loc, min, 3)
                     val lines = listOf(R.id.widgetLine1, R.id.widgetLine2, R.id.widgetLine3)
                     for ((i, resId) in lines.withIndex()) {
                         if (i < items.size) {
                             val it = items[i]
-                            val mark = if (it.kind == "goal") "🎯" else "・"
+                            val mark = if (it.kind == "material") "🎯" else "・"
                             views.setTextViewText(resId, "$mark ${it.title}（${it.minutes}分）")
                         } else {
                             views.setTextViewText(resId, "")
@@ -94,6 +83,14 @@ class SuggestWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(
                 R.id.widgetRoot,
                 PendingIntent.getActivity(ctx, 3, open, flags)
+            )
+            // 「暇」→ アプリを開いて条件入力ダイアログを出す
+            val free = Intent(ctx, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .putExtra(MainActivity.EXTRA_SHOW_FREE_TIME, true)
+            views.setOnClickPendingIntent(
+                R.id.widgetFree,
+                PendingIntent.getActivity(ctx, 4, free, flags)
             )
         }
     }

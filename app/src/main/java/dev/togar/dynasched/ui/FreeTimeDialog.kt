@@ -1,0 +1,139 @@
+package dev.togar.dynasched.ui
+
+import android.app.Activity
+import android.view.Gravity
+import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import dev.togar.dynasched.data.Repo
+import dev.togar.dynasched.Prefs
+import dev.togar.dynasched.api.Api
+import dev.togar.dynasched.api.ScheduledEvent
+import dev.togar.dynasched.api.SuggestItem
+import dev.togar.dynasched.notify.AlarmScheduler
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/**
+ * 「暇なとき」に、いまの状況（家か外か・何分あるか）を入れると
+ * やることを提示するダイアログ。GET /suggest をそのまま使う。
+ *
+ * 既定値は手を抜けるように寄せてある:
+ * - 場所はウィジェットと共有（Prefs.widgetLoc）
+ * - 時間は次の予定が始まるまでの分数
+ */
+object FreeTimeDialog {
+
+    /** 候補は絞らず全部見せる。選ぶのは自分でやりたいので。 */
+    private const val ALL = 100
+
+    fun show(activity: Activity) {
+        val ctx = activity.applicationContext
+        val density = activity.resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
+
+        val root = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(16), dp(24), dp(8))
+        }
+
+        root.addView(TextView(activity).apply {
+            text = "いまどこにいますか"
+            textSize = 14f
+        })
+
+        val locGroup = RadioGroup(activity).apply {
+            orientation = RadioGroup.HORIZONTAL
+            val home = RadioButton(activity).apply { id = 1; text = "家" }
+            val out = RadioButton(activity).apply { id = 2; text = "外" }
+            addView(home)
+            addView(out)
+            check(if (Prefs.widgetLoc(ctx) == "out") 2 else 1)
+        }
+        root.addView(locGroup)
+
+        root.addView(TextView(activity).apply {
+            text = "どれくらい時間がありますか"
+            textSize = 14f
+            setPadding(0, dp(12), 0, 0)
+        })
+
+        // 次の予定までの時間を初期値にする（そのまま押せば済むように）
+        val initial = Prefs.cachedEvents(ctx)
+            ?.let { ScheduledEvent.freeMinutesUntilNext(ScheduledEvent.fromJsonArray(it)) }
+            ?: 30
+        val duration = DurationPickerView(activity, initial)
+        root.addView(duration)
+
+        AlertDialog.Builder(activity)
+            .setTitle("暇なとき")
+            .setView(root)
+            .setNegativeButton("閉じる", null)
+            .setPositiveButton("提案して") { _, _ ->
+                val loc = if (locGroup.checkedRadioButtonId == 2) "out" else "home"
+                val min = duration.totalMinutes.let { if (it <= 0) 30 else it }
+                Prefs.setWidgetLoc(ctx, loc)   // ウィジェットと設定を揃えておく
+                fetch(activity, loc, min)
+            }
+            .show()
+    }
+
+    private fun fetch(activity: Activity, loc: String, min: Int) {
+        val ctx = activity.applicationContext
+        Toast.makeText(activity, "候補を探しています…", Toast.LENGTH_SHORT).show()
+        Api.async(
+            work = { Repo.current(ctx).getSuggestions(ctx, loc, min, ALL) },
+            onSuccess = { items ->
+                if (activity.isFinishing) return@async
+                showResult(activity, loc, min, items)
+            },
+            onError = { e ->
+                if (activity.isFinishing) return@async
+                Toast.makeText(activity, Api.friendlyMessage(e), Toast.LENGTH_LONG).show()
+            }
+        )
+    }
+
+    private fun showResult(activity: Activity, loc: String, min: Int, items: List<SuggestItem>) {
+        val locLabel = if (loc == "out") "外" else "家"
+        if (items.isEmpty()) {
+            AlertDialog.Builder(activity)
+                .setTitle("$locLabel・${min}分")
+                .setMessage("いまできる候補はありません。ゆっくり休みましょう。")
+                .setPositiveButton("閉じる", null)
+                .show()
+            return
+        }
+        val labels = items.map {
+            val mark = if (it.kind == "material") "🎯 " else "・"
+            "$mark${it.title}（${it.minutes}分）"
+        }.toTypedArray()
+
+        AlertDialog.Builder(activity)
+            .setTitle("$locLabel・${min}分ならこれ")
+            .setItems(labels) { _, which -> decide(activity, items[which], min) }
+            .setPositiveButton("ランダム") { _, _ -> decide(activity, items.random(), min) }
+            .setNegativeButton("閉じる", null)
+            .setNeutralButton("条件を変える") { _, _ -> show(activity) }
+            .show()
+    }
+
+    /**
+     * やることを決めたら、終わっているはずの時刻に確認通知を予約する。
+     * 決めた時点では何も記録しない。「やった」と言うのは終わってからでいい。
+     */
+    private fun decide(activity: Activity, item: SuggestItem, availableMin: Int) {
+        val ctx = activity.applicationContext
+        val minutes = minOf(item.minutes, availableMin).coerceAtLeast(5)
+        val at = System.currentTimeMillis() + minutes * 60_000L
+        AlarmScheduler.scheduleFreeTimeCheck(ctx, item.title, item.kind, item.id, at, minutes)
+        val label = SimpleDateFormat("HH:mm", Locale.JAPAN).format(Date(at))
+        Toast.makeText(
+            activity, "「${item.title}」を${minutes}分。$label に確認します", Toast.LENGTH_LONG
+        ).show()
+    }
+}

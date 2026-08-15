@@ -13,6 +13,7 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import dev.togar.dynasched.data.Repo
 import dev.togar.dynasched.AddTaskActivity
 import dev.togar.dynasched.R
 import dev.togar.dynasched.api.Api
@@ -90,7 +91,7 @@ class HobbyFragment : Fragment() {
         swipe.isRefreshing = true
         val ctx = requireContext().applicationContext
         Api.async(
-            work = { Api.getHobby(ctx) },
+            work = { Repo.current(ctx).getHobby(ctx) },
             onSuccess = { all ->
                 if (!isAdded) return@async
                 swipe.isRefreshing = false
@@ -110,7 +111,7 @@ class HobbyFragment : Fragment() {
     private fun toggle(item: HobbyItem, checked: Boolean) {
         val ctx = requireContext().applicationContext
         Api.async(
-            work = { Api.setHobbyCompleted(ctx, item.id, checked) },
+            work = { Repo.current(ctx).setHobbyCompleted(ctx, item.id, checked) },
             onSuccess = { if (isAdded) load() },
             onError = { e ->
                 if (!isAdded) return@async
@@ -187,7 +188,7 @@ class HobbyFragment : Fragment() {
                 val note = noteInput.text.toString().trim()
                 val appCtx = requireContext().applicationContext
                 Api.async(
-                    work = { Api.editHobby(appCtx, item.id, name, total, priority, location, note, color) },
+                    work = { Repo.current(ctx).editHobby(appCtx, item.id, name, total, priority, location, note, color) },
                     onSuccess = {
                         if (!isAdded) return@async
                         Toast.makeText(requireContext(), "更新しました", Toast.LENGTH_SHORT).show()
@@ -225,7 +226,7 @@ class HobbyFragment : Fragment() {
     private fun doDelete(item: HobbyItem) {
         val ctx = requireContext().applicationContext
         Api.async(
-            work = { Api.deleteHobby(ctx, item.id) },
+            work = { Repo.current(ctx).deleteHobby(ctx, item.id) },
             onSuccess = { if (isAdded) load() },
             onError = { e ->
                 if (!isAdded) return@async

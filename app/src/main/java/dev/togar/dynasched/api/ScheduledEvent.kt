@@ -17,7 +17,7 @@ data class ScheduledEvent(
     val endDatetime: String,
     val eventType: String,
     val isCompleted: Boolean,
-    val goalId: Long? = null
+    val materialId: Long? = null
 ) {
     /** 開始時刻を Date に変換（失敗したら null） */
     fun startAsDate(): Date? = parse(startDatetime)
@@ -68,7 +68,7 @@ data class ScheduledEvent(
             endDatetime = o.optString("end_datetime", ""),
             eventType = o.optString("event_type", "study"),
             isCompleted = o.optInt("is_completed", 0) == 1,
-            goalId = o.optLong("goal_id", 0L).let { if (it > 0L) it else null }
+            materialId = o.optLong("material_id", 0L).let { if (it > 0L) it else null }
         )
 
         /** 端末内キャッシュ用のシリアライズ（サーバーのJSONと同じ形） */
@@ -83,10 +83,28 @@ data class ScheduledEvent(
                         .put("end_datetime", ev.endDatetime)
                         .put("event_type", ev.eventType)
                         .put("is_completed", if (ev.isCompleted) 1 else 0)
-                        .put("goal_id", ev.goalId ?: 0L)
+                        .put("material_id", ev.materialId ?: 0L)
                 )
             }
             return arr.toString()
+        }
+
+        /**
+         * いまから次の未完了予定が始まるまでの分数。
+         * ウィジェット・早期完了の提案・「暇なとき」ダイアログの既定値に使う。
+         * 次の予定が無ければ 60分。短すぎ/長すぎは 15〜240 に丸める。
+         */
+        fun freeMinutesUntilNext(
+            events: List<ScheduledEvent>,
+            excludeId: Long? = null,
+            now: Long = System.currentTimeMillis()
+        ): Int {
+            val next = events
+                .filter { !it.isCompleted && it.id != excludeId }
+                .mapNotNull { it.startAsDate()?.time }
+                .filter { it > now }
+                .minOrNull() ?: return 60
+            return ((next - now) / 60000L).toInt().coerceIn(15, 240)
         }
 
         /** 壊れたキャッシュで落ちないよう、失敗時は空リストを返す */

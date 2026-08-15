@@ -9,3 +9,8 @@ captures/
 .cxx/
 .DS_Store
 HANDOFF_v16.md
+
+# リリース署名。公開リポジトリに絶対に入れない（鍵が漏れると偽物を配れる）
+keystore.properties
+*.jks
+*.keystore

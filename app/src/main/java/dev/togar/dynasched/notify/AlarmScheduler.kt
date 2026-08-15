@@ -18,14 +18,21 @@ object AlarmScheduler {
     const val EXTRA_TITLE = "title"
     const val EXTRA_TEXT = "text"
     const val EXTRA_KIND = "kind"          // "start" | "end"
-    const val EXTRA_GOAL_ID = "goal_id"
+    const val EXTRA_MATERIAL_ID = "material_id"
     const val EXTRA_END_MS = "end_ms"
     const val EXTRA_END_LABEL = "end_label"
+    const val EXTRA_SUGGEST_KIND = "suggest_kind"   // "hobby" | "material"
+    const val EXTRA_MINUTES = "minutes"
     const val KIND_START = "start"
     const val KIND_END = "end"
+    const val KIND_CHECK = "check"          // 「暇なとき」に決めたことの確認
 
     // 終了通知の requestCode/notifyId が開始通知と衝突しないためのオフセット
     const val END_ID_OFFSET = 1_000_000
+
+    // 「暇なとき」の確認は同時に1件だけ。固定 requestCode で常に上書きする。
+    private const val CHECK_REQUEST_CODE = 900_001
+    const val CHECK_NOTIFY_ID = 999_999_002
 
     private fun alarmManager(ctx: Context) =
         ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -44,7 +51,7 @@ object AlarmScheduler {
             putExtra(EXTRA_TITLE, ev.title)
             putExtra(EXTRA_TEXT, "${ev.startTimeLabel()} 開始予定")
             putExtra(EXTRA_KIND, KIND_START)
-            putExtra(EXTRA_GOAL_ID, ev.goalId ?: 0L)
+            putExtra(EXTRA_MATERIAL_ID, ev.materialId ?: 0L)
             putExtra(EXTRA_END_MS, ev.endAsDate()?.time ?: 0L)
             putExtra(EXTRA_END_LABEL, ev.endTimeLabel())
         }
@@ -57,7 +64,7 @@ object AlarmScheduler {
             putExtra(EXTRA_ID, ev.id)
             putExtra(EXTRA_TITLE, ev.title)
             putExtra(EXTRA_KIND, KIND_END)
-            putExtra(EXTRA_GOAL_ID, ev.goalId ?: 0L)
+            putExtra(EXTRA_MATERIAL_ID, ev.materialId ?: 0L)
             putExtra(EXTRA_END_MS, ev.endAsDate()?.time ?: 0L)
         }
         return PendingIntent.getBroadcast(ctx, ev.id.toInt() + END_ID_OFFSET, intent, piFlags())
@@ -74,6 +81,24 @@ object AlarmScheduler {
             alarmManager(ctx).cancel(pi)
             pi.cancel()
         }
+    }
+
+    /**
+     * 「暇なとき」でやることを決めた後、終わっているはずの時刻に確認通知を予約する。
+     * 決め直すたびに上書きされるので、古い確認が残ることはない。
+     */
+    fun scheduleFreeTimeCheck(
+        ctx: Context, title: String, suggestKind: String, suggestId: Long, atMs: Long, minutes: Int = 0
+    ) {
+        val intent = Intent(ctx, AlarmReceiver::class.java).apply {
+            putExtra(EXTRA_ID, suggestId)
+            putExtra(EXTRA_TITLE, title)
+            putExtra(EXTRA_KIND, KIND_CHECK)
+            putExtra(EXTRA_SUGGEST_KIND, suggestKind)
+            putExtra(EXTRA_MINUTES, minutes)
+        }
+        val pi = PendingIntent.getBroadcast(ctx, CHECK_REQUEST_CODE, intent, piFlags())
+        setAlarm(alarmManager(ctx), atMs, pi)
     }
 
     private fun setAlarm(am: AlarmManager, at: Long, pi: PendingIntent) {

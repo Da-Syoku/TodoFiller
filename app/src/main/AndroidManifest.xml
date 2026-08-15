@@ -11,9 +11,21 @@
     <!-- オンライン更新：ダウンロードしたAPKをインストールするために必要 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- 端末のカレンダーを直接読み書きする。
+         Googleカレンダーアプリが同期した内容にそのまま触れるので、
+         OAuthもサーバーも要らない（＝Googleの審査も不要）。 -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+
     <!-- ドパチル(com.dopachiru)へ学習予定を渡すための署名レベル権限。
          同じ鍵で署名されたアプリしか名乗れない。ドパチル未導入なら単に付与されないだけ。 -->
     <uses-permission android:name="com.dopachiru.permission.SYNC_STUDY" />
+
+    <!-- 逆方向：ドパチルの「この予定を中断する」を受けるための権限。
+         同じ鍵で署名されたアプリしか送れない（勝手に予定を消されないため）。 -->
+    <permission
+        android:name="dev.togar.dynasched.permission.CONTROL_SESSION"
+        android:protectionLevel="signature" />
 
     <application
         android:name=".App"
@@ -33,8 +45,10 @@
             </intent-filter>
         </activity>
 
+        <!-- singleTop: ウィジェットの「暇」で開き直したとき、作り直さず onNewIntent で受ける -->
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTop"
             android:exported="false" />
 
         <activity
@@ -84,6 +98,16 @@
         <receiver
             android:name=".notify.NotifyActionReceiver"
             android:exported="false" />
+
+        <!-- ドパチルからの「この予定を中断する」を受けるレシーバ（署名一致必須） -->
+        <receiver
+            android:name=".integration.AbortSessionReceiver"
+            android:exported="true"
+            android:permission="dev.togar.dynasched.permission.CONTROL_SESSION">
+            <intent-filter>
+                <action android:name="dev.togar.dynasched.action.ABORT_SESSION" />
+            </intent-filter>
+        </receiver>
 
         <!-- ホーム画面ウィジェット：空き時間のタスク提案 -->
         <receiver

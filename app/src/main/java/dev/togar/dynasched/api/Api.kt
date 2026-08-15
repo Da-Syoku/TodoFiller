@@ -212,9 +212,16 @@ object Api {
         return list
     }
 
-    /** タスク完了 (POST /schedule/:id/complete) ※バックエンドにPOSTエイリアスを追加済み */
-    fun completeTask(ctx: Context, id: Long) {
-        post(ctx, "/schedule/$id/complete", null)
+    /**
+     * タスク完了 (POST /schedule/:id/complete)。
+     * 教材の予定なら problems を渡すと実績として記録される。
+     * -1 のままなら、サーバーがコマの長さと実測ペースから推定して入れる
+     * （聞かずに済ませたいときの逃げ道。何も入らないより推定でも入るほうがいい）。
+     */
+    fun completeTask(ctx: Context, id: Long, problems: Int = -1) {
+        val json = JSONObject()
+        if (problems >= 0) json.put("problems", problems)
+        post(ctx, "/schedule/$id/complete", json)
     }
 
     /**
@@ -289,135 +296,98 @@ object Api {
         delete(ctx, "/hobby/$id")
     }
 
-    // ---- 定期タスク (timetable) ----
+    // ---- 教材 (materials) ----
 
-    /** 定期スロット一覧 (GET /timetable) */
-    fun getTimetable(ctx: Context): List<TimetableSlot> {
-        val body = get(ctx, "/timetable")
+    /** 教材一覧 (GET /materials) 期日昇順。計算済みの周・残り・実測ペース付き。 */
+    fun getMaterials(ctx: Context): List<MaterialItem> {
+        val body = get(ctx, "/materials")
         val arr = JSONArray(body)
-        val list = ArrayList<TimetableSlot>(arr.length())
-        for (i in 0 until arr.length()) list.add(TimetableSlot.from(arr.getJSONObject(i)))
-        return list
-    }
-
-    /** 定期スロット追加 (POST /timetable)。dayOfWeek: 1=月..7=日, 時刻は "HH:MM" */
-    fun addTimetableSlot(
-        ctx: Context, dayOfWeek: Int, startTime: String, endTime: String,
-        label: String, slotType: String, location: String = "home"
-    ) {
-        val json = JSONObject()
-            .put("day_of_week", dayOfWeek)
-            .put("start_time", startTime)
-            .put("end_time", endTime)
-            .put("label", label)
-            .put("slot_type", slotType)
-            .put("location", location)
-        post(ctx, "/timetable", json)
-    }
-
-    /** 定期スロット更新 (PUT /timetable/:id)。既存の予定を書き直す。 */
-    fun updateTimetableSlot(
-        ctx: Context, id: Long, dayOfWeek: Int, startTime: String, endTime: String,
-        label: String, slotType: String, location: String
-    ) {
-        val json = JSONObject()
-            .put("day_of_week", dayOfWeek)
-            .put("start_time", startTime)
-            .put("end_time", endTime)
-            .put("label", label)
-            .put("slot_type", slotType)
-            .put("location", location)
-        put(ctx, "/timetable/$id", json)
-    }
-
-    /** 定期スロット削除 (DELETE /timetable/:id) */
-    fun deleteTimetableSlot(ctx: Context, id: Long) {
-        delete(ctx, "/timetable/$id")
-    }
-
-    /**
-     * 週間ルーチンをGoogleカレンダーへ「毎週繰り返し予定」として書き出す
-     * (POST /routine/sync)。Google通信を含むため長めのタイムアウト。
-     */
-    fun syncRoutineCalendar(ctx: Context) {
-        post(ctx, "/routine/sync", JSONObject(), timeoutMs = 90000)
-    }
-
-    // ---- 目標タスク (goals) ----
-
-    /** 目標一覧 (GET /goals) 期日昇順 */
-    fun getGoals(ctx: Context): List<GoalItem> {
-        val body = get(ctx, "/goals")
-        val arr = JSONArray(body)
-        val list = ArrayList<GoalItem>(arr.length())
-        for (i in 0 until arr.length()) list.add(GoalItem.from(arr.getJSONObject(i)))
+        val list = ArrayList<MaterialItem>(arr.length())
+        for (i in 0 until arr.length()) list.add(MaterialItem.from(arr.getJSONObject(i)))
         return list
     }
 
     /**
-     * 目標追加 (POST /goals)。deadline は "yyyy-MM-ddTHH:mm:ss"。
-     * studyType/difficulty/understanding/progress/color/memo は省略時サーバー既定。
+     * 教材追加 (POST /materials)。deadline は "yyyy-MM-ddTHH:mm:ss"。
+     * 総時間・進捗%・難易度・理解度は**存在しない**（答えられない質問なので聞かない）。
      */
-    fun addGoal(
-        ctx: Context, name: String, deadline: String, totalMinutes: Int, priority: Int,
-        studyType: String = GoalItem.TYPE_EXERCISE, difficulty: Int = 3, understanding: Int = 3,
-        progress: Int = 0, color: String = "", memo: String = "", sessionMinutes: Int = 50,
-        progressNote: String = "", isExam: Boolean = false
+    fun addMaterial(
+        ctx: Context, subject: String, name: String, totalProblems: Int, advancedRanges: String,
+        targetRounds: Int, deadline: String, firstRoundDeadline: String, prereqMaterialId: Long?,
+        studyType: String, needs: String, sessionMinutes: Int, priority: Int,
+        color: String, memo: String, isExam: Boolean
     ) {
+        post(ctx, "/materials", materialBody(
+            subject, name, totalProblems, advancedRanges, targetRounds, deadline,
+            firstRoundDeadline, prereqMaterialId, studyType, needs, sessionMinutes,
+            priority, color, memo, isExam
+        ))
+    }
+
+    /** 教材を編集 (POST /material/:id/edit)。渡した項目だけ更新。 */
+    fun editMaterial(
+        ctx: Context, id: Long, subject: String, name: String, totalProblems: Int, advancedRanges: String,
+        targetRounds: Int, deadline: String, firstRoundDeadline: String, prereqMaterialId: Long?,
+        studyType: String, needs: String, sessionMinutes: Int, priority: Int,
+        color: String, memo: String, isExam: Boolean
+    ) {
+        post(ctx, "/material/$id/edit", materialBody(
+            subject, name, totalProblems, advancedRanges, targetRounds, deadline,
+            firstRoundDeadline, prereqMaterialId, studyType, needs, sessionMinutes,
+            priority, color, memo, isExam
+        ))
+    }
+
+    private fun materialBody(
+        subject: String, name: String, totalProblems: Int, advancedRanges: String,
+        targetRounds: Int, deadline: String, firstRoundDeadline: String, prereqMaterialId: Long?,
+        studyType: String, needs: String, sessionMinutes: Int, priority: Int,
+        color: String, memo: String, isExam: Boolean
+    ): JSONObject {
         val json = JSONObject()
+            .put("subject", subject)
             .put("name", name)
+            .put("total_problems", totalProblems)
+            .put("advanced_ranges", advancedRanges)
+            .put("target_rounds", targetRounds)
             .put("deadline", deadline)
-            .put("total_minutes", totalMinutes)
-            .put("priority", priority)
             .put("study_type", studyType)
-            .put("difficulty", difficulty)
-            .put("understanding", understanding)
-            .put("progress", progress)
-            .put("memo", memo)
+            .put("needs", needs)
             .put("session_minutes", sessionMinutes)
-            .put("progress_note", progressNote)
+            .put("priority", priority)
+            .put("memo", memo)
             .put("is_exam", if (isExam) 1 else 0)
+        if (firstRoundDeadline.isNotEmpty()) json.put("first_round_deadline", firstRoundDeadline)
+        if (prereqMaterialId != null) json.put("prereq_material_id", prereqMaterialId)
         if (color.isNotEmpty()) json.put("color", color)
-        post(ctx, "/goals", json)
+        return json
+    }
+
+    /** 教材削除 (DELETE /materials/:id) */
+    fun deleteMaterial(ctx: Context, id: Long) {
+        delete(ctx, "/materials/$id")
     }
 
     /**
-     * 目標を編集 (POST /goal/:id/edit)。渡した項目だけ更新（サーバーは列存在チェック付き動的UPDATE）。
+     * 実績の記録 (POST /material/:id/attempt)。**唯一の進捗入力**。
+     * 所要時間はここから測るので、ユーザーには聞かない。
      */
-    fun editGoal(
-        ctx: Context, id: Long, name: String, deadline: String, totalMinutes: Int, priority: Int,
-        studyType: String, difficulty: Int, understanding: Int, progress: Int, color: String, memo: String,
-        sessionMinutes: Int = 50, progressNote: String = "", isExam: Boolean = false
-    ) {
+    fun recordAttempt(ctx: Context, id: Long, problems: Int, minutes: Int, eventId: Long? = null) {
         val json = JSONObject()
-            .put("name", name)
-            .put("deadline", deadline)
-            .put("total_minutes", totalMinutes)
-            .put("priority", priority)
-            .put("study_type", studyType)
-            .put("difficulty", difficulty)
-            .put("understanding", understanding)
-            .put("progress", progress)
-            .put("color", color)
-            .put("memo", memo)
-            .put("session_minutes", sessionMinutes)
-            .put("progress_note", progressNote)
-            .put("is_exam", if (isExam) 1 else 0)
-        post(ctx, "/goal/$id/edit", json)
+            .put("problems", problems)
+            .put("minutes", minutes)
+        if (eventId != null && eventId > 0) json.put("event_id", eventId)
+        post(ctx, "/material/$id/attempt", json)
     }
 
-    /** 目標削除 (DELETE /goals/:id) */
-    fun deleteGoal(ctx: Context, id: Long) {
-        delete(ctx, "/goals/$id")
+    /** 直前の実績を取り消す (POST /material/:id/undo) */
+    fun undoAttempt(ctx: Context, id: Long) {
+        post(ctx, "/material/$id/undo", JSONObject())
     }
 
-    /** 進捗の相対加算・理解度の記録 (POST /goal/:id/bump)。通知アクションから使う。 */
-    fun bumpGoal(ctx: Context, id: Long, progressDelta: Int = 0, understanding: Int = 0) {
-        val json = JSONObject()
-        if (progressDelta != 0) json.put("progress_delta", progressDelta)
-        if (understanding in 1..5) json.put("understanding", understanding)
-        post(ctx, "/goal/$id/bump", json)
-    }
+    /** 「間に合うのか」 (GET /plan) */
+    fun getPlan(ctx: Context, days: Int = 45): PlanResult =
+        PlanResult.from(JSONObject(get(ctx, "/plan?days=$days")))
 
     // ---- タスク提案 (widget) ----
 

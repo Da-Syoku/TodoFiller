@@ -10,12 +10,12 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import dev.togar.dynasched.data.Repo
 import dev.togar.dynasched.Prefs
 import dev.togar.dynasched.R
 import dev.togar.dynasched.api.Api
 import dev.togar.dynasched.api.ScheduledEvent
-import dev.togar.dynasched.integration.StudySync
-import dev.togar.dynasched.notify.AlarmScheduler
+import dev.togar.dynasched.api.ScheduleRepo
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -46,7 +46,14 @@ class TodayFragment : Fragment() {
         recycler.layoutManager = LinearLayoutManager(requireContext())
         recycler.adapter = adapter
 
-        swipe.setOnRefreshListener { load() }
+        // 予定が無い時間に「何をやろう」を解決するための入口
+        root.findViewById<android.widget.Button>(R.id.freeTimeButton).apply {
+            visibility = View.VISIBLE
+            setOnClickListener { FreeTimeDialog.show(requireActivity()) }
+        }
+
+        // 引っ張って更新した時だけはキャッシュを無視して取り直す
+        swipe.setOnRefreshListener { load(force = true) }
 
         // 通信を待たずに前回の内容を出す（圏外・低速回線でも即座に今日の予定が見える）
         showCache()
@@ -72,12 +79,14 @@ class TodayFragment : Fragment() {
         header.text = "今日の予定（前回の内容）"
     }
 
-    private fun load() {
+    private fun load(force: Boolean = false) {
         swipe.isRefreshing = true
         val todayStr = today()
         val ctx = requireContext().applicationContext
         Api.async(
-            work = { Api.getSchedule(ctx, todayStr) },
+            // 取得・アラーム予約・ドパチルへの送信は ScheduleRepo が持つ。
+            // ここで直に呼ぶと MainActivity と二重にやることになる。
+            work = { ScheduleRepo.refresh(ctx, todayStr, force) },
             onSuccess = { all ->
                 if (!isAdded) return@async
                 swipe.isRefreshing = false
@@ -90,9 +99,6 @@ class TodayFragment : Fragment() {
                 empty.visibility = if (todays.isEmpty()) View.VISIBLE else View.GONE
                 empty.text = "今日の予定はありません"
                 Prefs.saveScheduleCache(ctx, todayStr, ScheduledEvent.toJsonArray(todays))
-                // 通知は取得できた全期間ぶんを予約する（今日だけにすると翌日以降が鳴らなくなる）
-                AlarmScheduler.scheduleAll(ctx, all)
-                StudySync.send(ctx, all)   // ドパチルへ学習予定を全置換で渡す
             },
             onError = { e ->
                 if (!isAdded) return@async
@@ -114,11 +120,11 @@ class TodayFragment : Fragment() {
     private fun complete(ev: ScheduledEvent) {
         val ctx = requireContext().applicationContext
         Api.async(
-            work = { Api.completeTask(ctx, ev.id) },
+            work = { Repo.current(ctx).completeTask(ctx, ev.id) },
             onSuccess = {
                 if (!isAdded) return@async
                 Toast.makeText(requireContext(), "完了しました", Toast.LENGTH_SHORT).show()
-                load()
+                load(force = true)   // 内容が変わったのでキャッシュは使えない
             },
             onError = { e ->
                 if (!isAdded) return@async

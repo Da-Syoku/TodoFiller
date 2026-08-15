@@ -32,6 +32,26 @@
         android:text="Googleでログイン"
         android:textColor="@color/white" />
 
+    <!-- サーバーを持たない人はログインできず、ここで詰む。
+         端末内だけで始められる道を必ず用意しておく。 -->
+    <Button
+        android:id="@+id/localStartButton"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="サーバーを使わずに始める"
+        android:textColor="@color/primary" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:text="端末のカレンダーだけで動きます。ログインは要りません。"
+        android:textColor="@color/on_bg_dim"
+        android:textSize="12sp" />
+
     <TextView
         android:id="@+id/statusText"
         android:layout_width="wrap_content"

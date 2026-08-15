@@ -8,10 +8,15 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import android.content.pm.PackageManager
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import dev.togar.dynasched.api.Api
 
 class LoginActivity : AppCompatActivity() {
+
+    private companion object { const val REQ_CALENDAR = 4102 }
 
     private lateinit var loginButton: Button
     private lateinit var statusText: TextView
@@ -19,8 +24,8 @@ class LoginActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 既にログイン済みならメイン画面へ
-        if (Prefs.isLoggedIn(this)) {
+        // 端末内だけで動かす設定なら、ログインという概念自体が無い
+        if (Prefs.localMode(this) || Prefs.isLoggedIn(this)) {
             goMain()
             return
         }
@@ -30,12 +35,53 @@ class LoginActivity : AppCompatActivity() {
         statusText = findViewById(R.id.statusText)
 
         loginButton.setOnClickListener { startGoogleLogin() }
+
+        // サーバーを持たない人はここで詰む。端末内だけで始められる道を必ず用意する。
+        findViewById<Button>(R.id.localStartButton).setOnClickListener { startLocalOnly() }
     }
 
     override fun onResume() {
         super.onResume()
         // ディープリンクでトークンを受け取った後に戻ってきた場合
         if (Prefs.isLoggedIn(this)) goMain()
+    }
+
+    /**
+     * サーバーを使わずに始める。
+     * カレンダーの権限だけ取れれば動くので、ログインもアカウントも要らない。
+     */
+    private fun startLocalOnly() {
+        val granted = ContextCompat.checkSelfPermission(
+            this, android.Manifest.permission.READ_CALENDAR
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(
+                    android.Manifest.permission.READ_CALENDAR,
+                    android.Manifest.permission.WRITE_CALENDAR
+                ),
+                REQ_CALENDAR
+            )
+            return
+        }
+        Prefs.setLocalMode(this, true)
+        goMain()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQ_CALENDAR) return
+        if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            Prefs.setLocalMode(this, true)
+            goMain()
+        } else {
+            Toast.makeText(
+                this, "カレンダーを読めないと予定を組めません", Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     private fun startGoogleLogin() {

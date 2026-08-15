@@ -20,13 +20,13 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="目標タスク"
+            android:text="教材"
             android:textColor="@color/on_bg"
             android:textSize="20sp"
             android:textStyle="bold" />
 
         <Button
-            android:id="@+id/addGoalButton"
+            android:id="@+id/addMaterialButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:backgroundTint="@color/primary"
@@ -34,7 +34,21 @@
             android:textColor="@color/white" />
     </LinearLayout>
 
-    <!-- リストを上へスワイプするとカレンダーごと画面外へ流れる -->
+    <!-- 「間に合うのか」の総括。ここが最重要表示なので常に見える位置に置く。 -->
+    <TextView
+        android:id="@+id/planSummary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="4dp"
+        android:background="@color/surface"
+        android:padding="12dp"
+        android:text=""
+        android:textColor="@color/on_bg_dim"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <androidx.coordinatorlayout.widget.CoordinatorLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -58,7 +72,7 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="16dp"
                     android:paddingBottom="4dp"
-                    android:text="カレンダーの日付をタップして目標を追加"
+                    android:text="カレンダーの日付をタップして教材を追加（その日が試験日）"
                     android:textColor="@color/on_bg_dim"
                     android:textSize="12sp" />
 
@@ -97,7 +111,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    android:text="目標はありません"
+                    android:text="教材はありません"
                     android:textColor="@color/on_bg_dim"
                     android:textSize="15sp"
                     android:visibility="gone" />

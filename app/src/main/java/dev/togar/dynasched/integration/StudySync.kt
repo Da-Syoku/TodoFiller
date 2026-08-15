@@ -51,7 +51,7 @@ object StudySync {
                         .put("startAt", startSec)
                         .put("endAt", endSec)
                         .put("title", ev.title)
-                        .put("goalId", ev.goalId?.let { "goal_$it" } ?: "")
+                        .put("goalId", ev.materialId?.let { "material_$it" } ?: "")
                         .put("kind", ev.eventType)
                 )
             }

@@ -47,6 +47,53 @@
             android:text="通知を再設定する"
             android:textColor="@color/white" />
 
+        <!-- サーバー経由をやめて端末のカレンダーを直接読む移行中の確認用。
+             タグの付け方と読み取り結果が一致しているかを実機で見るためのもの。 -->
+        <Button
+            android:id="@+id/calendarCheckButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="カレンダーの読み取りを確認"
+            android:textColor="@color/primary" />
+
+        <!-- 動作方式の切替。両方の実装を残してあるので、壊れたら戻せる。 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="動作方式"
+            android:textColor="@color/on_bg_dim"
+            android:textSize="12sp" />
+
+        <Switch
+            android:id="@+id/localModeSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="端末内だけで動かす（サーバーを使わない）"
+            android:textColor="@color/on_bg"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/localModeHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text=""
+            android:textColor="@color/on_bg_dim"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/importButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="サーバーのデータを端末へ取り込む"
+            android:textColor="@color/primary" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

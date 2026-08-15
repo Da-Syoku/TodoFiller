@@ -12,9 +12,9 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import dev.togar.dynasched.api.Api
-import dev.togar.dynasched.integration.StudySync
-import dev.togar.dynasched.notify.AlarmScheduler
-import dev.togar.dynasched.ui.GoalFragment
+import dev.togar.dynasched.api.ScheduleRepo
+import dev.togar.dynasched.ui.FreeTimeDialog
+import dev.togar.dynasched.ui.MaterialFragment
 import dev.togar.dynasched.ui.HobbyFragment
 import dev.togar.dynasched.ui.SettingsFragment
 import dev.togar.dynasched.ui.TodayFragment
@@ -25,13 +25,19 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
+    companion object {
+        /** ウィジェットの「暇」から開かれたとき、条件入力ダイアログを出す */
+        const val EXTRA_SHOW_FREE_TIME = "show_free_time"
+    }
+
     private val requestNotif =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* 結果は問わない */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (!Prefs.isLoggedIn(this)) {
+        // 端末内だけで動かす設定ならログインは要らない
+        if (!Prefs.localMode(this) && !Prefs.isLoggedIn(this)) {
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
             return
@@ -47,7 +53,7 @@ class MainActivity : AppCompatActivity() {
             val fragment: Fragment = when (item.itemId) {
                 R.id.nav_today -> TodayFragment()
                 R.id.nav_single -> HobbyFragment()
-                R.id.nav_goal -> GoalFragment()
+                R.id.nav_material -> MaterialFragment()
                 R.id.nav_settings -> SettingsFragment()
                 else -> TodayFragment()
             }
@@ -57,11 +63,25 @@ class MainActivity : AppCompatActivity() {
 
         if (savedInstanceState == null) {
             nav.selectedItemId = R.id.nav_today
+            if (intent?.getBooleanExtra(EXTRA_SHOW_FREE_TIME, false) == true) {
+                FreeTimeDialog.show(this)
+            }
+        }
+    }
+
+    /** すでに起動している状態でウィジェットの「暇」が押されたとき */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_SHOW_FREE_TIME, false)) {
+            FreeTimeDialog.show(this)
         }
     }
 
     override fun onStart() {
         super.onStart()
+        // 端末内方式ではトークンを使わないので、失効の面倒を見る必要がない
+        if (Prefs.localMode(this)) return
         // トークンが切れた時は、各画面がエラーを出す前にログインへ戻す
         Api.onUnauthorized = {
             if (!isFinishing && !isDestroyed) {
@@ -80,16 +100,17 @@ class MainActivity : AppCompatActivity() {
         Api.onUnauthorized = null
     }
 
-    /** 今日の予定を取得してローカル通知を予約し直す（バックグラウンド） */
+    /**
+     * 今日の予定を取得してローカル通知を予約し直す（バックグラウンド）。
+     * 予定タブを廃止したので起動時に必ず1度通す。TodayFragment も同じものを見るが、
+     * ScheduleRepo が重複要求をまとめるので通信は1回で済む。
+     */
     private fun syncNotifications() {
         val ctx = applicationContext
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         Api.async(
-            work = { Api.getSchedule(ctx, today) },
-            onSuccess = { events ->
-                AlarmScheduler.scheduleAll(ctx, events)
-                StudySync.send(ctx, events)   // ドパチルへ学習予定を全置換で渡す
-            },
+            work = { ScheduleRepo.refresh(ctx, today) },
+            onSuccess = { /* 予約はrefreshの中で済んでいる */ },
             onError = { /* 通信できない時は何もしない */ }
         )
     }

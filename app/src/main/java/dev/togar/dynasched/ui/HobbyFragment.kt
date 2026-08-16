@@ -183,8 +183,14 @@ class HobbyFragment : Fragment() {
     /** いま指が示している段 */
     private var dragLevel = 0
 
-    /** 1段ぶんの横幅。表示のインデント(24dp)と揃えてある */
-    private fun stepPx(): Float = 24 * resources.displayMetrics.density
+    /**
+     * 1段変えるのに必要な横のずれ。
+     *
+     * 表示のインデント(24dp)より広く取ってある。縦にドラッグする指は自然に横へも
+     * 振れるので、インデント幅と同じにすると触っただけで段が変わってしまう。
+     * 40dpなら、半分の20dpまでの振れは段を変えない。
+     */
+    private fun stepPx(): Float = 40 * resources.displayMetrics.density
 
     /**
      * 長押しでそのまま掴んで動かす。モードに入る手順は挟まない。
@@ -200,7 +206,15 @@ class HobbyFragment : Fragment() {
 
         override fun getMovementFlags(rv: RecyclerView, holder: RecyclerView.ViewHolder): Int {
             if (!canReorder) return 0
-            return makeMovementFlags(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0)
+            // **LEFT/RIGHT を入れないと横のずれが取れない。**
+            // ItemTouchHelper は許可されていない向きの移動量を 0 に丸めるので、
+            // 上下だけを許可していると onChildDraw に来る dX が常に 0 になり、
+            // 右にずらしても段が変わらない（v27がこれだった）。
+            // 行はどれも同じ幅で左右の位置も同じなので、横向きの入れ替え相手は
+            // 見つからず、誤って横に並び替わることはない。
+            val drag = ItemTouchHelper.UP or ItemTouchHelper.DOWN or
+                ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT
+            return makeMovementFlags(drag, 0)
         }
 
         override fun onSelectedChanged(holder: RecyclerView.ViewHolder?, actionState: Int) {

@@ -51,8 +51,8 @@ android {
         applicationId = "dev.togar.dynasched"
         minSdk = 26
         targetSdk = 34
-        versionCode = 27
-        versionName = "27.0"
+        versionCode = 28
+        versionName = "28.0"
         // バックエンドのベースURL。変えたい場合はここだけ書き換える。
         buildConfigField("String", "API_BASE_URL", "\"https://api.togar.dev\"")
     }
@@ -111,4 +111,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     // テストのみ。APKには入らないので「外部ライブラリ不使用」の方針とは衝突しない
     testImplementation("junit:junit:4.13.2")
+    // android.jar に入っている org.json は中身が空で、呼ぶと例外になる。
+    // 本物をテスト側にだけ入れて、控えの読み取りをJVM上で確かめられるようにする
+    testImplementation("org.json:json:20240303")
 }

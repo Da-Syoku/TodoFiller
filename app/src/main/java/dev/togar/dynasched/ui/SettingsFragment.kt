@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import dev.togar.dynasched.data.Repo
 import dev.togar.dynasched.BuildConfig
@@ -20,8 +21,21 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** 設定画面：ユーザー情報・通知再設定・スケジューラ再実行・ログアウト */
+/** 設定画面：ユーザー情報・通知再設定・スケジューラ再実行・バックアップ・ログアウト */
 class SettingsFragment : Fragment() {
+
+    /**
+     * 保存先はファイル選択に任せる（SAF）。アプリが勝手に書ける場所へ置くと、
+     * **アプリを消した時に一緒に消えて控えの意味が無くなる**。
+     * 登録は画面が動き出す前に済ませる必要があるのでフィールドで持つ。
+     */
+    private val exportPicker = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> if (uri != null) writeBackup(uri) }
+
+    private val restorePicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) confirmRestore(uri) }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -64,6 +78,12 @@ class SettingsFragment : Fragment() {
             Prefs.setFillDays(requireContext(), n)
             fillDaysInput.setText(Prefs.fillDays(requireContext()).toString())
             runScheduler()
+        }
+        root.findViewById<Button>(R.id.backupExportButton).setOnClickListener {
+            exportPicker.launch(dev.togar.dynasched.data.Backup.suggestedFileName())
+        }
+        root.findViewById<Button>(R.id.backupRestoreButton).setOnClickListener {
+            restorePicker.launch(arrayOf("application/json", "text/plain", "*/*"))
         }
         checkUpdateBtn.setOnClickListener {
             Toast.makeText(requireContext(), "更新を確認中…", Toast.LENGTH_SHORT).show()
@@ -157,6 +177,88 @@ class SettingsFragment : Fragment() {
             onError = { e ->
                 if (!isAdded) return@async
                 Toast.makeText(requireContext(), "失敗: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
+            }
+        )
+    }
+
+    // ---- バックアップ ----
+
+    private fun writeBackup(uri: android.net.Uri) {
+        val ctx = requireContext().applicationContext
+        Api.async(
+            work = {
+                val json = dev.togar.dynasched.data.Backup.export(ctx)
+                ctx.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                    ?: throw java.io.IOException("書き込み先を開けませんでした")
+                dev.togar.dynasched.data.Backup.peek(json)
+            },
+            onSuccess = { r ->
+                if (!isAdded) return@async
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("書き出しました")
+                    .setMessage(
+                        "教材 ${r.materials}件 / 実績 ${r.attempts}件 / 単発タスク ${r.hobbies}件\n\n" +
+                            "**アプリを入れ直すと端末内のデータは消えます。**\n" +
+                            "このファイルをクラウドなど別の場所にも置いておいてください。"
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+            },
+            onError = { e ->
+                if (!isAdded) return@async
+                Toast.makeText(requireContext(), "書き出せませんでした: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        )
+    }
+
+    /** 復元は全部入れ替え。取り返しがつかないので、中身を見せてから確認する */
+    private fun confirmRestore(uri: android.net.Uri) {
+        val ctx = requireContext().applicationContext
+        Api.async(
+            work = {
+                val json = ctx.contentResolver.openInputStream(uri)?.use {
+                    it.readBytes().toString(Charsets.UTF_8)
+                } ?: throw java.io.IOException("ファイルを開けませんでした")
+                json to dev.togar.dynasched.data.Backup.peek(json)
+            },
+            onSuccess = { (json, r) ->
+                if (!isAdded) return@async
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("復元しますか？")
+                    .setMessage(
+                        "控えの中身:\n教材 ${r.materials}件 / 実績 ${r.attempts}件 / 単発タスク ${r.hobbies}件\n\n" +
+                            "**いま端末にあるデータは全部消えて、この控えで置き換わります。**\n" +
+                            "予定は消えるので、復元後にスケジューラを実行してください。"
+                    )
+                    .setPositiveButton("復元する") { _, _ -> doRestore(json) }
+                    .setNegativeButton("やめる", null)
+                    .show()
+            },
+            onError = { e ->
+                if (!isAdded) return@async
+                Toast.makeText(requireContext(), "読めませんでした: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        )
+    }
+
+    private fun doRestore(json: String) {
+        val ctx = requireContext().applicationContext
+        Api.async(
+            work = { dev.togar.dynasched.data.Backup.restore(ctx, json) },
+            onSuccess = { r ->
+                if (!isAdded) return@async
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("復元しました")
+                    .setMessage(
+                        "教材 ${r.materials}件 / 実績 ${r.attempts}件 / 単発タスク ${r.hobbies}件\n\n" +
+                            "予定はまだありません。「スケジューラ実行」を押してください。"
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+            },
+            onError = { e ->
+                if (!isAdded) return@async
+                Toast.makeText(requireContext(), "復元できませんでした: ${e.message}", Toast.LENGTH_LONG).show()
             }
         )
     }

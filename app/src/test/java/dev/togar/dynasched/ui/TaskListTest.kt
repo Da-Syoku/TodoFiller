@@ -119,35 +119,75 @@ class TaskListTest {
 
     // ---- 並び替え ----
 
+    /** ドラッグで from を to の位置へ動かした後の見た目の並び */
+    private fun moved(rows: List<TaskRow>, from: Int, to: Int): List<TaskRow> {
+        val l = rows.toMutableList()
+        l.add(to, l.removeAt(from))
+        return l
+    }
+
     @Test
-    fun `兄弟どうしなら入れ替わる`() {
+    fun `同じ段に落とせば並びだけが変わる`() {
+        val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), false)   // 中間,新しい,古い
+        val after = moved(rows, 2, 0)                                        // 古い,中間,新しい
+        val drop = TaskList.dropTarget(after, flat, 0, 0)!!
+        assertNull(drop.parentId)
+        assertEquals(listOf(1L, 2L, 3L), drop.siblingIds)
+    }
+
+    @Test
+    fun `1段深くすると上の行の子になる`() {
+        val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), false)   // 中間,新しい,古い
+        val drop = TaskList.dropTarget(rows, flat, 1, 1)!!
+        assertEquals("すぐ上の「中間」の子になる", 2L, drop.parentId)
+        assertEquals(1, drop.level)
+    }
+
+    @Test
+    fun `上に行が無ければ深くできない`() {
         val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), false)
-        assertEquals(listOf(3L, 2L, 1L), TaskList.moveWithinSiblings(rows, 0, 1))
+        val drop = TaskList.dropTarget(rows, flat, 0, 3)!!
+        assertNull("先頭は誰の子にもなれない", drop.parentId)
+        assertEquals(0, drop.level)
     }
 
     @Test
-    fun `親をまたぐ移動は認めない`() {
-        val rows = TaskList.build(tree, TaskSort.MANUAL, emptySet(), false)
-        // 「親」(level0) を「子1」(level1) の位置へ落とす
-        assertNull(TaskList.moveWithinSiblings(rows, 0, 1))
+    fun `2段以上は飛べない`() {
+        // 「中間」(0段) の下に「新しい」を3段目で落としても、2段目までしか入れない
+        val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), false)
+        assertEquals(1, TaskList.dropTarget(rows, flat, 1, 3)!!.level)
     }
 
     @Test
-    fun `子タスク化はすぐ上の兄弟の下に入る`() {
-        val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), false)  // 中間,新しい,古い
-        assertEquals(2L, TaskList.indentTarget(rows, 1))
-        assertNull("先頭は子にできない", TaskList.indentTarget(rows, 0))
-    }
-
-    @Test
-    fun `子をやめると親の隣に上がる`() {
+    fun `段を0にすれば子をやめて最上位に戻る`() {
         val rows = TaskList.build(tree, TaskSort.MANUAL, emptySet(), false)
         val magoIndex = rows.indexOfFirst { it.item.name == "孫" }
-        assertTrue(TaskList.canOutdent(rows, magoIndex))
-        assertEquals("孫の新しい親は「子1」の親＝「親」", 1L, TaskList.outdentParent(rows, magoIndex))
+        val drop = TaskList.dropTarget(rows, tree, magoIndex, 0)!!
+        assertNull(drop.parentId)
+    }
 
-        val oyaIndex = rows.indexOfFirst { it.item.name == "親" }
-        assertTrue("最上位はもう上がれない", !TaskList.canOutdent(rows, oyaIndex))
+    @Test
+    fun `自分の子孫の中には落とせない`() {
+        // 「親」を「孫」の下（2段目）へ落とそうとする。許すと木が輪になって一覧が出なくなる
+        val rows = TaskList.build(tree, TaskSort.MANUAL, emptySet(), false)
+        val after = moved(rows, 0, 2)
+        val drop = TaskList.dropTarget(after, tree, 2, 2)
+        assertTrue(
+            "自分の子孫が親になった",
+            drop == null || drop.parentId !in TaskList.subtreeIds(tree, 1L)
+        )
+    }
+
+    @Test
+    fun `畳んで見えていない兄弟も並びから漏らさない`() {
+        // 「親」を畳んだ状態で「単独」をその子にする。子1・子2は行に出ていない
+        val rows = TaskList.build(tree, TaskSort.MANUAL, setOf(1L), false)   // 親,単独
+        val drop = TaskList.dropTarget(rows, tree, 1, 1)!!
+        assertEquals(1L, drop.parentId)
+        assertEquals(
+            "見えていない子が並びから消える",
+            setOf(2L, 3L, 9L), drop.siblingIds.toSet()
+        )
     }
 
     @Test

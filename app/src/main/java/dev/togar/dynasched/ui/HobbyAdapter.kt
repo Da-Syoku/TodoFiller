@@ -19,26 +19,21 @@ import dev.togar.dynasched.api.HobbyItem
  * 並び順・折りたたみ・完了のまとめ方をここで判断すると、
  * 画面を動かさないと確かめられないものが増える。
  *
- * 並び替えモード中はボタン類を隠す。ドラッグ中に「削除」が押せると事故になる。
+ * **長押しでそのまま掴んで動かせる**。モードに入る手順は挟まない。
+ * 掴んだ行はボタンを隠して、1枚の板を持ち上げているように見せる。
  */
 class HobbyAdapter(
     private val onToggle: (HobbyItem, Boolean) -> Unit,
     private val onAddChild: (HobbyItem) -> Unit,
     private val onDelete: (HobbyItem) -> Unit,
     private val onEdit: (HobbyItem) -> Unit,
-    private val onCollapse: (HobbyItem) -> Unit,
-    private val onLongPress: (HobbyItem) -> Unit
+    private val onCollapse: (HobbyItem) -> Unit
 ) : RecyclerView.Adapter<HobbyAdapter.VH>() {
 
     private val rows = ArrayList<TaskRow>()
 
-    /** 並び替えモード中か */
-    var reordering: Boolean = false
-        set(value) {
-            if (field == value) return
-            field = value
-            notifyDataSetChanged()
-        }
+    /** つかんでいる行のID。その行だけボタンを隠して、掴んだ塊に見せる */
+    var draggingId: Long? = null
 
     fun submit(list: List<TaskRow>) {
         rows.clear()
@@ -132,14 +127,15 @@ class HobbyAdapter(
             holder.check.setOnCheckedChangeListener { _, isChecked -> onToggle(item, isChecked) }
         }
 
-        if (reordering) {
-            // 並び替え中は編集も削除もさせない。ドラッグの手が当たって消えるのを防ぐ
-            holder.textContainer.setOnClickListener(null)
-            holder.textContainer.isClickable = false
-            holder.itemView.setOnLongClickListener(null)
+        if (item.id == draggingId) {
+            // つかんでいる間はボタンを隠す。指が当たって削除されるのを防ぐのと、
+            // 1枚の板を持ち上げているように見せるため
             holder.addChild.visibility = View.GONE
             holder.delete.visibility = View.GONE
+            holder.expand.visibility = View.GONE
             holder.check.isEnabled = false
+            holder.textContainer.setOnClickListener(null)
+            holder.textContainer.isClickable = false
         } else {
             holder.check.isEnabled = true
             holder.addChild.visibility = View.VISIBLE
@@ -152,8 +148,9 @@ class HobbyAdapter(
             } else {
                 holder.textContainer.setOnClickListener { onCollapse(item) }
             }
-            holder.itemView.setOnLongClickListener { onLongPress(item); true }
         }
+        // 長押しはItemTouchHelperがそのまま「つかむ」に使う。
+        // ここでリスナを付けると長押しを食ってしまうので付けない。
     }
 
     private fun leafSub(item: HobbyItem): String {

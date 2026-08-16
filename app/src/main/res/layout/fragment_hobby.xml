@@ -40,41 +40,27 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- 並び替えモード中だけ出る帯。抜ける方法が常に見えている状態にする -->
+    <!-- 掴んでいる間だけ出る帯。いま何段目に置こうとしているかを見せる -->
     <LinearLayout
-        android:id="@+id/reorderBar"
+        android:id="@+id/dragHintBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:background="@color/surface"
         android:paddingStart="16dp"
-        android:paddingEnd="8dp"
+        android:paddingEnd="16dp"
         android:paddingTop="6dp"
         android:paddingBottom="6dp"
         android:visibility="gone">
 
         <TextView
-            android:layout_width="0dp"
+            android:id="@+id/dragHintText"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="並び替え中：長押しで移動、右へ払うと子タスク、左へ払うと解除"
-            android:textColor="@color/on_bg_dim"
+            android:text=""
+            android:textColor="@color/primary"
             android:textSize="11sp" />
-
-        <Button
-            android:id="@+id/reorderDoneButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
-            android:backgroundTint="@color/primary"
-            android:text="完了"
-            android:textColor="@color/white"
-            android:textSize="12sp" />
     </LinearLayout>
 
     <!-- タスク追加（専用画面へ遷移） -->

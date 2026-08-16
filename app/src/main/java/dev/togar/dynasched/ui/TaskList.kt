@@ -132,49 +132,55 @@ object TaskList {
         return if (doneAtBottom) compareBy<HobbyItem> { it.isCompleted }.then(inner) else inner
     }
 
+    /** ドロップ結果：新しい親と、その親の子の新しい並び */
+    data class Drop(val parentId: Long?, val siblingIds: List<Long>, val level: Int)
+
+    /** id の子孫すべて（自分も含む）。自分の中へは落とせないので必ず要る */
+    fun subtreeIds(all: List<HobbyItem>, id: Long): Set<Long> {
+        val byParent = all.groupBy { it.parentId }
+        val out = HashSet<Long>()
+        fun walk(x: Long) {
+            if (!out.add(x)) return
+            byParent[x].orEmpty().forEach { walk(it.id) }
+        }
+        walk(id)
+        return out
+    }
+
     /**
-     * 並び替えで行を動かした結果の、**同じ親を持つ兄弟の新しい並び**。
+     * ドラッグして離した所から、新しい親と並びを決める。
      *
-     * 親をまたぐ移動は認めない（階層が壊れるため）。動かせない時は null を返し、
-     * 呼び出し側はドラッグを無視する。
+     * 縦の位置だけでは「すぐ上の行の子になりたいのか、隣に並びたいのか」が決まらない。
+     * そこで**横のずれで段（level）を指定する**形にしてある。指を右に送れば1段深くなる。
+     *
+     * @param rows 見た目の並び（動かした後）。moved は dropIndex に居る
+     * @param all  全タスク。畳んで見えていない子も含めて数える必要がある
+     * @param desiredLevel 横のずれから割り出した段。ここでは上の行より深くならないよう丸める
      */
-    fun moveWithinSiblings(rows: List<TaskRow>, from: Int, to: Int): List<Long>? {
-        if (from !in rows.indices || to !in rows.indices || from == to) return null
-        val moved = rows[from].item
-        val target = rows[to].item
-        if (moved.parentId != target.parentId) return null
-        val siblings = rows.filter { it.item.parentId == moved.parentId }
-            .map { it.item.id }.toMutableList()
-        val i = siblings.indexOf(moved.id)
-        val j = siblings.indexOf(target.id)
-        if (i < 0 || j < 0) return null
-        siblings.removeAt(i)
-        siblings.add(j, moved.id)
-        return siblings
-    }
+    fun dropTarget(
+        rows: List<TaskRow>, all: List<HobbyItem>, dropIndex: Int, desiredLevel: Int
+    ): Drop? {
+        val moved = rows.getOrNull(dropIndex)?.item ?: return null
+        val subtree = subtreeIds(all, moved.id)
 
-    /**
-     * 右スワイプ＝子タスク化。**すぐ上の兄弟**の子になる。
-     * 上に兄弟が無ければ子にできない（親がいないため）ので null。
-     */
-    fun indentTarget(rows: List<TaskRow>, position: Int): Long? {
-        val row = rows.getOrNull(position) ?: return null
-        val prev = rows.take(position).lastOrNull { it.item.parentId == row.item.parentId }
-            ?: return null
-        return prev.item.id
-    }
+        // 自分の子孫の行は「上の行」として数えない。数えると自分の中へ落ちてしまう
+        val aboveRows = rows.take(dropIndex).filter { it.item.id !in subtree }
+        val above = aboveRows.lastOrNull()
+        // 上の行より2段以上深くはできない（間に親が居ないため）
+        val level = desiredLevel.coerceIn(0, if (above == null) 0 else above.level + 1)
 
-    /** 左スワイプ＝子をやめられるか。最上位のものはこれ以上上がれない */
-    fun canOutdent(rows: List<TaskRow>, position: Int): Boolean =
-        rows.getOrNull(position)?.item?.parentId != null
+        val parentId: Long? =
+            if (level == 0) null
+            else aboveRows.lastOrNull { it.level == level - 1 }?.item?.id ?: return null
+        if (parentId != null && parentId in subtree) return null
 
-    /**
-     * 子をやめたときの新しい親（親の親）。**null は「最上位へ上がる」という結果**で、
-     * 失敗ではない。呼ぶ前に [canOutdent] で確かめること。
-     */
-    fun outdentParent(rows: List<TaskRow>, position: Int): Long? {
-        val parentId = rows.getOrNull(position)?.item?.parentId ?: return null
-        return rows.firstOrNull { it.item.id == parentId }?.item?.parentId
+        // 兄弟の並び。畳まれていて見えていない子は見える分の後ろへ回す
+        val visible = rows.filter { it.item.id == moved.id || it.item.parentId == parentId }
+            .map { it.item.id }
+            .filter { it == moved.id || it !in subtree }
+        val hidden = all.filter { it.parentId == parentId && it.id !in visible && it.id !in subtree }
+            .map { it.id }
+        return Drop(parentId, visible + hidden, level)
     }
 
     /**

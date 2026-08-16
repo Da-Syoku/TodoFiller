@@ -179,15 +179,29 @@ class SettingsFragment : Fragment() {
         )
     }
 
+    /**
+     * 再生成。**結果を必ず数字で見せる。**
+     *
+     * 以前は成功トーストを出すだけだったので、0件しか置けていない時と
+     * 正常な時が見分けられなかった。「使い方が悪いのか不具合なのか」を
+     * ここで判別できるようにしておく。
+     */
     private fun runScheduler() {
         val days = Prefs.fillDays(requireContext())
         Toast.makeText(requireContext(), "スケジューラ実行中…（${days}日先まで）", Toast.LENGTH_SHORT).show()
         val ctx = requireContext().applicationContext
         Api.async(
             work = { Repo.current(ctx).runScheduler(ctx, days) },
-            onSuccess = {
+            onSuccess = { report ->
                 if (!isAdded) return@async
-                Toast.makeText(requireContext(), "スケジュールを再生成し、Googleカレンダーに反映しました", Toast.LENGTH_LONG).show()
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle(
+                        if (report.serverMode) "再生成しました"
+                        else "再生成: ${report.placed}件"
+                    )
+                    .setMessage(report.describe())
+                    .setPositiveButton("閉じる", null)
+                    .show()
             },
             onError = { e ->
                 if (!isAdded) return@async

@@ -372,26 +372,36 @@ class MaterialFragment : Fragment() {
         val builder = AlertDialog.Builder(ctx)
             .setTitle(if (existing == null) "教材を追加" else "教材を編集")
             .setView(ScrollView(ctx).apply { addView(layout) })
-            .setPositiveButton(if (existing == null) "追加" else "保存") { _, _ ->
+            // 中身は下の setOnShowListener で処理する。理由はそこに書いてある
+            .setPositiveButton(if (existing == null) "追加" else "保存", null)
+            .setNegativeButton("キャンセル", null)
+        if (existing != null) builder.setNeutralButton("削除") { _, _ -> confirmDelete(existing) }
+
+        val dialog = builder.create()
+        // AlertDialog のボタンは**押した時点で必ず閉じる**。
+        // 入力漏れで閉じられると、ここまで入れた内容が全部消えて一からやり直しになる。
+        // show() の後にリスナーを差し替えると、閉じるかどうかを自分で決められる。
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val name = nameInput.text.toString().trim()
                 if (name.isEmpty()) {
                     Toast.makeText(ctx, "教材名を入力してください", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
+                    nameInput.requestFocus()
+                    return@setOnClickListener      // 閉じない
                 }
                 val total = totalInput.text.toString().trim().toIntOrNull() ?: 0
                 if (total <= 0) {
                     Toast.makeText(ctx, "総問数を入力してください", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
+                    totalInput.requestFocus()
+                    return@setOnClickListener      // 閉じない
                 }
-                val deadline = fmt(cal)
-                val firstDeadline = if (useFirstRound) fmt(firstCal) else ""
                 save(
                     existing?.id,
                     subjectInput.text.toString().trim(),
                     name, total,
                     advancedInput.text.toString().trim(),
                     roundsSlider.value,
-                    deadline, firstDeadline,
+                    fmt(cal), if (useFirstRound) fmt(firstCal) else "",
                     prereqOptions[prereqSpinner.selectedItemPosition].first,
                     studyTypeValues[typeSpinner.selectedItemPosition],
                     MaterialItem.NEEDS_VALUES[needsSpinner.selectedItemPosition],
@@ -400,10 +410,10 @@ class MaterialFragment : Fragment() {
                     memoInput.text.toString().trim(),
                     examSwitch.isChecked
                 )
+                dialog.dismiss()
             }
-            .setNegativeButton("キャンセル", null)
-        if (existing != null) builder.setNeutralButton("削除") { _, _ -> confirmDelete(existing) }
-        builder.show()
+        }
+        dialog.show()
     }
 
     private fun fmt(c: Calendar) = String.format(

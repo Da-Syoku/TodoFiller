@@ -105,16 +105,30 @@ object LocalRepo : Repo {
 
     // ---- 配置 ----
 
-    override fun runScheduler(ctx: Context, days: Int) {
+    /**
+     * 計画を見る日数。配置する日数（既定7日）より必ず長く取る。
+     *
+     * **ここを配置日数に合わせると壊れる。** 計画側は締切日までの空き時間を数えて
+     * 「間に合うか」を判定し、足りなければ応用を外して周回を減らす。カレンダーを
+     * 7日ぶんしか読んでいないと、8日目以降の空きが全部0とみなされ、締切が先の教材ほど
+     * 「絶対に間に合わない」と判定されて1周まで削られる。すでに1周終えていれば
+     * 残り0問になり、配置対象から丸ごと消える——つまり**予定が生成されなくなる**。
+     */
+    private const val PLAN_DAYS = 45
+
+    override fun runScheduler(ctx: Context, days: Int): RunReport {
         val db = LocalDb.get(ctx).writableDatabase
-        val snap = CalendarRepo.read(ctx, days, Prefs.calendarId(ctx))
+        val planDays = maxOf(days, PLAN_DAYS)
+        val calId = Prefs.calendarId(ctx) ?: CalendarRepo.targetCalendar(ctx)?.id
+        // 計画に必要な日数ぶん読む。配置側は先頭 days 日しか見ないので余分は害にならない
+        val snap = CalendarRepo.read(ctx, planDays, calId)
         val materials = materialRows(ctx)
         val hobbies = hobbyRows(ctx)
         val eng = engine(ctx)
 
         // 先に計画を立てて「応用を外す/周回を減らす」を確定させる。
         // 画面と配置がここで必ず一致する。
-        val plan = PlanEngine.build(materials, hobbies, snap.windows, snap.busy, eng, maxOf(days, 45))
+        val plan = PlanEngine.build(materials, hobbies, snap.windows, snap.busy, eng, planDays)
         for ((id, decision) in plan.decisions) {
             db.execSQL(
                 "UPDATE materials SET drop_advanced=?, planned_rounds=? WHERE id=?",
@@ -151,12 +165,90 @@ object LocalRepo : Repo {
         }
 
         // カレンダーへ書き戻す（末尾「%」で全置換）
-        val calId = Prefs.calendarId(ctx) ?: CalendarRepo.targetCalendar(ctx)?.id
-        if (calId != null) {
+        val written = if (calId != null) {
             CalendarWriter.replaceGenerated(
                 ctx, calId, placed.map { Triple(it.title, it.start, it.end) }, days
             )
+        } else 0 to 0
+
+        val cal = calId?.let { id -> CalendarRepo.listCalendars(ctx).firstOrNull { it.id == id } }
+        return RunReport(
+            calendarName = cal?.displayName ?: snap.calendarName,
+            calendarWritable = cal?.canWrite ?: true,
+            fillDays = days,
+            planDays = planDays,
+            windows = snap.windows.size,
+            busy = snap.busy.size,
+            examPeriods = snap.examPeriods.size,
+            freeMinutes = freeMinutesWithin(snap, days),
+            materialsActive = refreshed.size,
+            hobbiesActive = hobbies.size,
+            placedStudy = placed.count { it.eventType == "study" },
+            placedHobby = placed.count { it.eventType != "study" },
+            placedMinutes = placed.sumOf { minutesBetween(it.start, it.end) },
+            calRemoved = written.first,
+            calAdded = written.second,
+            skipped = skipReasons(refreshed, snap, eng, days)
+        )
+    }
+
+    /** 配置対象の日数ぶんの空き時間（分） */
+    private fun freeMinutesWithin(snap: dev.togar.dynasched.calendar.CalendarSnapshot, days: Int): Int {
+        val cal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
         }
+        var total = 0
+        for (i in 0 until days.coerceIn(1, 30)) {
+            val ds = Scheduler.ymd((cal.clone() as java.util.Calendar).apply {
+                add(java.util.Calendar.DAY_OF_MONTH, i)
+            })
+            for (f in Scheduler.computeFree(ds, snap.busy, snap.windows)) total += f.end - f.start
+        }
+        return total
+    }
+
+    private fun minutesBetween(start: String, end: String): Int {
+        val s = Scheduler.parseDeadlineMillis(start) ?: return 0
+        val e = Scheduler.parseDeadlineMillis(end) ?: return 0
+        return ((e - s) / 60000L).toInt().coerceAtLeast(0)
+    }
+
+    /**
+     * 配置対象から外れた教材と、その理由。
+     *
+     * 除外はどれも `Scheduler.run` の中で黙って起こる。理由が見えないと
+     * 「設定が悪いのか壊れているのか」が永遠に判別できないので、同じ条件をここで数える。
+     */
+    private fun skipReasons(
+        materials: List<MaterialRow>, snap: dev.togar.dynasched.calendar.CalendarSnapshot,
+        eng: StudyEngine, days: Int
+    ): List<String> {
+        val today = ymd()
+        val examToday = snap.examPeriods.any { it.startDate <= today && today <= it.endDate }
+        val out = ArrayList<String>()
+        for (m in materials) {
+            val st = eng.stateOf(m)
+            val dlMs = Scheduler.parseDeadlineMillis(m.deadline)
+            val reason = when {
+                dlMs == null -> "試験日が読めない（${m.deadline}）"
+                dlMs <= System.currentTimeMillis() -> "試験日を過ぎている（${m.deadline.take(10)}）"
+                st.remainingProblems <= 0 ->
+                    if (st.plannedRounds < st.target)
+                        "残り0問（間に合わないので${st.plannedRounds}周に削られた結果）"
+                    else "残り0問（やり終えた）"
+                m.prereqMaterialId != null &&
+                    materials.firstOrNull { it.id == m.prereqMaterialId }
+                        ?.let { eng.stateOf(it).finishedRounds < 1 } == true ->
+                    "前提の教材が1周終わっていない"
+                examToday && !m.isExam -> "テスト期間中（定期テスト対象ではない）"
+                m.needs != "none" && snap.windows.none { it.location == "home" } ->
+                    "家の枠が無い（机・声・PCが要る教材）"
+                else -> null
+            }
+            if (reason != null) out.add("${m.name}: $reason")
+        }
+        return out
     }
 
     // ---- 単発タスク ----

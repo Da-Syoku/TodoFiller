@@ -48,5 +48,11 @@ data class DeviceCalendar(
     val id: Long,
     val displayName: String,
     val accountName: String,
-    val isPrimary: Boolean
+    val isPrimary: Boolean,
+    /**
+     * 予定を足したり消したりできるか（CALENDAR_ACCESS_LEVEL が寄稿者以上）。
+     * 祝日・誕生日・購読カレンダーは読み取り専用で、書いても**黙って失敗する**。
+     * ここを見ずに選ぶと「予定が消えない・増えない」という形でしか気付けない。
+     */
+    val canWrite: Boolean = true
 )

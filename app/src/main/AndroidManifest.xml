@@ -99,6 +99,11 @@
             android:name=".notify.NotifyActionReceiver"
             android:exported="false" />
 
+        <!-- 毎朝5時に予定を組み直す。サーバー版のcronに相当する（端末内方式で必須） -->
+        <receiver
+            android:name=".notify.DailyRunReceiver"
+            android:exported="false" />
+
         <!-- ドパチルからの「この予定を中断する」を受けるレシーバ（署名一致必須） -->
         <receiver
             android:name=".integration.AbortSessionReceiver"

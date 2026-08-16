@@ -47,11 +47,20 @@ object CalendarWriter {
      */
     fun clearGenerated(ctx: Context, calendarId: Long, daysAhead: Int): Int {
         val now = System.currentTimeMillis()
-        val until = now + (daysAhead + 1).toLong() * DAY_MS
+        return clearGeneratedBetween(ctx, calendarId, now, now + (daysAhead + 1).toLong() * DAY_MS)
+    }
+
+    /**
+     * 指定した期間の自動生成予定を消す。
+     *
+     * 掃除用に**過去も含めて**消せる形を分けてある。サーバー時代に別カレンダーへ
+     * 書かれた予定は、端末内方式のアプリからは視界の外にあって普通の実行では消えない。
+     */
+    fun clearGeneratedBetween(ctx: Context, calendarId: Long, fromMs: Long, toMs: Long): Int {
         var removed = 0
         val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().apply {
-            ContentUris.appendId(this, now)
-            ContentUris.appendId(this, until)
+            ContentUris.appendId(this, fromMs)
+            ContentUris.appendId(this, toMs)
         }.build()
         try {
             ctx.contentResolver.query(

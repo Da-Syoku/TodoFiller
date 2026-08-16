@@ -9,6 +9,7 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             AlarmScheduler.rescheduleFromCache(context)
+            DailyRunReceiver.schedule(context)   // 毎日の自動実行も取り直す
         }
     }
 }

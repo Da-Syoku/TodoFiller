@@ -28,8 +28,8 @@ interface Repo {
     /** できなかった。予定を消して後の空き時間へ再配置する */
     fun skipTask(ctx: Context, id: Long)
 
-    /** 予定を組み直す */
-    fun runScheduler(ctx: Context, days: Int)
+    /** 予定を組み直す。何が起きたか（何件置けたか・なぜ置けなかったか）を返す */
+    fun runScheduler(ctx: Context, days: Int): RunReport
 
     fun getHobby(ctx: Context): List<HobbyItem>
     fun addHobby(

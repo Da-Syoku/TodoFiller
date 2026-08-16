@@ -17,7 +17,11 @@ object ServerRepo : Repo {
     override fun getSchedule(ctx: Context, dateYmd: String) = Api.getSchedule(ctx, dateYmd)
     override fun completeTask(ctx: Context, id: Long, problems: Int) = Api.completeTask(ctx, id, problems)
     override fun skipTask(ctx: Context, id: Long) = Api.skipTask(ctx, id)
-    override fun runScheduler(ctx: Context, days: Int) = Api.runScheduler(ctx, days)
+    override fun runScheduler(ctx: Context, days: Int): RunReport {
+        Api.runScheduler(ctx, days)
+        // サーバーは件数を返さないので、中身は端末内方式のときだけ埋まる
+        return RunReport(serverMode = true, fillDays = days)
+    }
 
     override fun getHobby(ctx: Context): List<HobbyItem> = Api.getHobby(ctx)
 

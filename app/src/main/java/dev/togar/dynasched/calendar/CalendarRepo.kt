@@ -41,7 +41,8 @@ object CalendarRepo {
         CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
         CalendarContract.Calendars.ACCOUNT_NAME,
         CalendarContract.Calendars.OWNER_ACCOUNT,
-        CalendarContract.Calendars.IS_PRIMARY
+        CalendarContract.Calendars.IS_PRIMARY,
+        CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL
     )
 
     private val TAG_OUT = Regex("(&o|外)\\s*$", RegexOption.IGNORE_CASE)
@@ -53,7 +54,7 @@ object CalendarRepo {
 
     // ---- カレンダーの選択 ----
 
-    /** 端末上の書き込み可能なカレンダー一覧 */
+    /** 端末上のカレンダー一覧（読み取り専用のものも含む。`canWrite` で判別する） */
     fun listCalendars(ctx: Context): List<DeviceCalendar> {
         val out = ArrayList<DeviceCalendar>()
         query(ctx, CalendarContract.Calendars.CONTENT_URI, CALENDAR_COLS, null, null)?.use { c ->
@@ -67,7 +68,8 @@ object CalendarRepo {
                         id = c.getLong(0),
                         displayName = c.getString(1) ?: account,
                         accountName = account,
-                        isPrimary = primary
+                        isPrimary = primary,
+                        canWrite = c.getInt(5) >= CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR
                     )
                 )
             }
@@ -76,12 +78,59 @@ object CalendarRepo {
     }
 
     /**
-     * 読み書きの対象カレンダー。主カレンダーを優先し、無ければ最初の1つ。
-     * 端末にカレンダーが1つも無ければ null。
+     * 読み書きの対象カレンダー。
+     *
+     * **書き込めるものを優先する。** 祝日カレンダーなどを掴むと、読めるのに
+     * 書けない・消せないという一番分かりにくい壊れ方をする。
      */
     fun targetCalendar(ctx: Context): DeviceCalendar? {
         val all = listCalendars(ctx)
-        return all.firstOrNull { it.isPrimary } ?: all.firstOrNull()
+        return all.firstOrNull { it.isPrimary && it.canWrite }
+            ?: all.firstOrNull { it.canWrite }
+            ?: all.firstOrNull { it.isPrimary }
+            ?: all.firstOrNull()
+    }
+
+    /**
+     * 対象カレンダー以外に残っている自動生成予定（末尾「%」）を数える。
+     *
+     * サーバー版は専用のカレンダーを自前で作ってそこへ書いていた。端末内方式は
+     * 主カレンダーを見るので、**サーバー時代の予定はアプリの視界の外に残り続ける**。
+     * 「消えない」の正体がこれかどうかを、推測ではなく件数で確かめるためのもの。
+     *
+     * @return カレンダー → (予定の件数, 見本のタイトル)
+     */
+    fun findGeneratedElsewhere(
+        ctx: Context, exceptCalendarId: Long?, daysAhead: Int
+    ): List<Triple<DeviceCalendar, Int, String>> {
+        val from = System.currentTimeMillis() - 30L * DAY_MS   // 過去の残骸も拾う
+        val to = System.currentTimeMillis() + (daysAhead + 1).toLong() * DAY_MS
+        val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().apply {
+            ContentUris.appendId(this, from)
+            ContentUris.appendId(this, to)
+        }.build()
+        val out = ArrayList<Triple<DeviceCalendar, Int, String>>()
+        for (cal in listCalendars(ctx)) {
+            if (cal.id == exceptCalendarId) continue
+            var n = 0
+            var sample = ""
+            query(
+                ctx, uri,
+                arrayOf(CalendarContract.Instances.EVENT_ID, CalendarContract.Instances.TITLE),
+                "${CalendarContract.Instances.CALENDAR_ID}=?", arrayOf(cal.id.toString())
+            )?.use { c ->
+                val seen = HashSet<Long>()
+                while (c.moveToNext()) {
+                    val t = (c.getString(1) ?: "").trim()
+                    if (!t.endsWith(GENERATED_SUFFIX)) continue
+                    if (!seen.add(c.getLong(0))) continue
+                    n++
+                    if (sample.isEmpty()) sample = t
+                }
+            }
+            if (n > 0) out.add(Triple(cal, n, sample))
+        }
+        return out
     }
 
     // ---- 読み取り ----

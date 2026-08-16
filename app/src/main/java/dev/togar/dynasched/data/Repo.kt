@@ -44,6 +44,22 @@ interface Repo {
     fun setHobbyCompleted(ctx: Context, id: Long, completed: Boolean)
     fun deleteHobby(ctx: Context, id: Long)
 
+    /**
+     * 並び替え・階層の変更ができるか。
+     * サーバー側に対応する口が無いので、端末内方式だけ true。
+     * 画面はこれを見て並び替えモードの入口ごと隠す（押せるのに効かない、を作らない）。
+     */
+    val supportsReorder: Boolean get() = false
+
+    /** 同じ親を持つタスクの並び順を、渡された順で保存する */
+    fun reorderHobby(ctx: Context, orderedIds: List<Long>) = Unit
+
+    /** 親を付け替える（子タスク化／子をやめる）。自分の子孫は親にできない */
+    fun setHobbyParent(ctx: Context, id: Long, parentId: Long?) = Unit
+
+    /** 優先度だけを変える（優先度順で並び替えたとき） */
+    fun setHobbyPriority(ctx: Context, id: Long, priority: Int) = Unit
+
     fun getMaterials(ctx: Context): List<MaterialItem>
     fun addMaterial(ctx: Context, m: MaterialInput)
     fun editMaterial(ctx: Context, id: Long, m: MaterialInput)

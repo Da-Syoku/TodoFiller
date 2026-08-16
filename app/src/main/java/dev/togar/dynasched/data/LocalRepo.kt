@@ -255,7 +255,8 @@ object LocalRepo : Repo {
 
     override fun getHobby(ctx: Context): List<HobbyItem> =
         LocalDb.get(ctx).readableDatabase.rawQuery(
-            "SELECT * FROM hobby_tasks WHERE is_active=1 ORDER BY COALESCE(parent_id,0), id", null
+            "SELECT * FROM hobby_tasks WHERE is_active=1 ORDER BY COALESCE(parent_id,0), sort_order, id",
+            null
         ).mapRows { c ->
             HobbyItem(
                 id = c.long("id"),
@@ -266,7 +267,8 @@ object LocalRepo : Repo {
                 location = c.str("location", "anywhere"),
                 note = c.str("note"),
                 priority = c.int("priority", 5),
-                color = c.str("color")
+                color = c.str("color"),
+                sortOrder = c.int("sort_order")
             )
         }
 
@@ -274,12 +276,63 @@ object LocalRepo : Repo {
         ctx: Context, name: String, parentId: Long?, durationMinutes: Int,
         priority: Int, location: String, note: String, color: String
     ) {
-        LocalDb.get(ctx).writableDatabase.insert("hobby_tasks", null, values(
+        val db = LocalDb.get(ctx).writableDatabase
+        // 追加は同じ親の末尾へ。既存の手動順を崩さない
+        val next = db.rawQuery(
+            "SELECT COALESCE(MAX(sort_order),0)+1 n FROM hobby_tasks WHERE " +
+                (if (parentId == null) "parent_id IS NULL" else "parent_id=?"),
+            if (parentId == null) null else arrayOf(parentId.toString())
+        ).mapRows { it.int("n") }.firstOrNull() ?: 1
+        db.insert("hobby_tasks", null, values(
             "name" to name, "parent_id" to parentId, "duration_minutes" to durationMinutes,
             "priority" to priority, "location" to location, "note" to note, "color" to color,
-            "is_active" to 1, "is_completed" to 0
+            "is_active" to 1, "is_completed" to 0, "sort_order" to next
         ))
     }
+
+    override val supportsReorder: Boolean get() = true
+
+    override fun reorderHobby(ctx: Context, orderedIds: List<Long>) {
+        val db = LocalDb.get(ctx).writableDatabase
+        db.beginTransaction()
+        try {
+            orderedIds.forEachIndexed { i, id ->
+                db.execSQL("UPDATE hobby_tasks SET sort_order=? WHERE id=?", arrayOf(i + 1, id))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun setHobbyParent(ctx: Context, id: Long, parentId: Long?) {
+        // 自分の子孫を親にすると木が輪になって、一覧が二度と出てこなくなる
+        if (parentId != null && (parentId == id || isDescendant(ctx, parentId, id))) return
+        val db = LocalDb.get(ctx).writableDatabase
+        val next = db.rawQuery(
+            "SELECT COALESCE(MAX(sort_order),0)+1 n FROM hobby_tasks WHERE " +
+                (if (parentId == null) "parent_id IS NULL" else "parent_id=?"),
+            if (parentId == null) null else arrayOf(parentId.toString())
+        ).mapRows { it.int("n") }.firstOrNull() ?: 1
+        db.execSQL(
+            "UPDATE hobby_tasks SET parent_id=?, sort_order=? WHERE id=?",
+            arrayOf(parentId, next, id)
+        )
+    }
+
+    override fun setHobbyPriority(ctx: Context, id: Long, priority: Int) {
+        LocalDb.get(ctx).writableDatabase
+            .execSQL("UPDATE hobby_tasks SET priority=? WHERE id=?", arrayOf(priority, id))
+    }
+
+    /** candidate が root の子孫か */
+    private fun isDescendant(ctx: Context, candidate: Long, root: Long): Boolean =
+        LocalDb.get(ctx).readableDatabase.rawQuery(
+            "WITH RECURSIVE sub(id) AS (SELECT id FROM hobby_tasks WHERE id=? " +
+                "UNION ALL SELECT h.id FROM hobby_tasks h JOIN sub s ON h.parent_id=s.id) " +
+                "SELECT COUNT(*) c FROM sub WHERE id=?",
+            arrayOf(root.toString(), candidate.toString())
+        ).mapRows { it.int("c") }.firstOrNull().let { (it ?: 0) > 0 }
 
     override fun editHobby(
         ctx: Context, id: Long, name: String, durationMinutes: Int,

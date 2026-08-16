@@ -10,11 +10,13 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import dev.togar.dynasched.data.Repo
 import dev.togar.dynasched.AddTaskActivity
+import dev.togar.dynasched.Prefs
 import dev.togar.dynasched.R
 import dev.togar.dynasched.api.Api
 import dev.togar.dynasched.api.HobbyItem
@@ -28,6 +30,12 @@ class HobbyFragment : Fragment() {
     private lateinit var adapter: HobbyAdapter
     private lateinit var swipe: SwipeRefreshLayout
     private lateinit var empty: TextView
+    private lateinit var reorderBar: View
+    private lateinit var sortButton: Button
+    private lateinit var touchHelper: ItemTouchHelper
+
+    /** 直近に読み込んだ生データ。並び替え・折りたたみは読み直さずに組み直す */
+    private var loaded: List<HobbyItem> = emptyList()
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -36,6 +44,8 @@ class HobbyFragment : Fragment() {
 
         empty = root.findViewById(R.id.emptyText)
         swipe = root.findViewById(R.id.swipeRefresh)
+        reorderBar = root.findViewById(R.id.reorderBar)
+        sortButton = root.findViewById(R.id.sortButton)
         val recycler = root.findViewById<RecyclerView>(R.id.recycler)
         val addButton = root.findViewById<Button>(R.id.addTaskButton)
 
@@ -43,17 +53,23 @@ class HobbyFragment : Fragment() {
             onToggle = { item, checked -> toggle(item, checked) },
             onAddChild = { item -> openAddChild(item) },
             onDelete = { item -> confirmDelete(item) },
-            onEdit = { item -> openEdit(item) }
+            onEdit = { item -> openEdit(item) },
+            onCollapse = { item -> toggleCollapse(item) },
+            onLongPress = { startReorder() }
         )
         recycler.layoutManager = LinearLayoutManager(requireContext())
         recycler.adapter = adapter
+        touchHelper = ItemTouchHelper(ReorderCallback())
+        touchHelper.attachToRecyclerView(recycler)
 
-        // 追加ボタン → 専用の追加画面へ遷移
         addButton.setOnClickListener {
             startActivity(Intent(requireContext(), AddTaskActivity::class.java))
         }
+        sortButton.setOnClickListener { showViewMenu() }
+        root.findViewById<Button>(R.id.reorderDoneButton).setOnClickListener { endReorder() }
 
         swipe.setOnRefreshListener { load() }
+        updateSortLabel()
         return root
     }
 
@@ -62,30 +78,71 @@ class HobbyFragment : Fragment() {
         load()
     }
 
-    /** フラットなリストを深さ優先で並べ、level と hasChildren を付与する（任意の深さ） */
-    private fun buildOrdered(all: List<HobbyItem>): List<HobbyItem> {
-        val byParent = all.groupBy { it.parentId }
-        val existingIds = all.map { it.id }.toHashSet()
-        val result = ArrayList<HobbyItem>()
-        val visited = HashSet<Long>()
-
-        fun addSubtree(item: HobbyItem, level: Int) {
-            if (!visited.add(item.id)) return // 循環参照ガード
-            item.level = level
-            val children = byParent[item.id].orEmpty()
-            item.hasChildren = children.isNotEmpty()
-            result.add(item)
-            for (c in children) addSubtree(c, level + 1)
-        }
-
-        // ルート＝parent_idがnull、または親が存在しない孤児
-        for (item in all) {
-            if (item.parentId == null || !existingIds.contains(item.parentId)) {
-                addSubtree(item, 0)
-            }
-        }
-        return result
+    override fun onPause() {
+        super.onPause()
+        // 画面を離れたら並び替えモードは畳む（戻ってきて誤操作するのを防ぐ）
+        if (adapter.reordering) endReorder()
     }
+
+    // ---- 表示の設定 ----
+
+    private fun sortMode(): TaskSort = TaskSort.from(Prefs.taskSort(requireContext()))
+
+    private fun updateSortLabel() {
+        val done = if (Prefs.doneAtBottom(requireContext())) "済↓" else "済＝"
+        sortButton.text = "${shortLabel(sortMode())} / $done"
+    }
+
+    private fun shortLabel(s: TaskSort) = when (s) {
+        TaskSort.MANUAL -> "手動"
+        TaskSort.NEWEST -> "新しい順"
+        TaskSort.OLDEST -> "古い順"
+        TaskSort.PRIORITY -> "優先度順"
+        TaskSort.LONGEST -> "長い順"
+        TaskSort.SHORTEST -> "短い順"
+    }
+
+    /** 並び順と「完了の見せ方」をまとめて選ぶ */
+    private fun showViewMenu() {
+        val ctx = requireContext()
+        val sorts = TaskSort.entries
+        val doneBottom = Prefs.doneAtBottom(ctx)
+        val labels = sorts.map { if (it == sortMode()) "● ${it.label}" else "　${it.label}" } +
+            listOf(
+                if (doneBottom) "● 完了したものを下にまとめる" else "　完了したものを下にまとめる",
+                if (!doneBottom) "● 完了したものはその場に薄く残す" else "　完了したものはその場に薄く残す"
+            ) +
+            listOf("　すべて畳む", "　すべて開く")
+
+        AlertDialog.Builder(ctx)
+            .setTitle("並び順と表示")
+            .setItems(labels.toTypedArray()) { _, i ->
+                when {
+                    i < sorts.size -> Prefs.setTaskSort(ctx, sorts[i].name)
+                    i == sorts.size -> Prefs.setDoneAtBottom(ctx, true)
+                    i == sorts.size + 1 -> Prefs.setDoneAtBottom(ctx, false)
+                    i == sorts.size + 2 -> Prefs.setCollapsed(ctx, allParentIds())
+                    else -> Prefs.setCollapsed(ctx, emptySet())
+                }
+                updateSortLabel()
+                render()
+            }
+            .setNegativeButton("閉じる", null)
+            .show()
+    }
+
+    private fun allParentIds(): Set<Long> =
+        loaded.mapNotNull { it.parentId }.toSet()
+
+    private fun toggleCollapse(item: HobbyItem) {
+        val ctx = requireContext()
+        val cur = Prefs.collapsed(ctx).toMutableSet()
+        if (!cur.add(item.id)) cur.remove(item.id)
+        Prefs.setCollapsed(ctx, cur)
+        render()
+    }
+
+    // ---- 読み込みと描画 ----
 
     private fun load() {
         swipe.isRefreshing = true
@@ -95,9 +152,8 @@ class HobbyFragment : Fragment() {
             onSuccess = { all ->
                 if (!isAdded) return@async
                 swipe.isRefreshing = false
-                val ordered = buildOrdered(all)
-                adapter.submit(ordered)
-                empty.visibility = if (ordered.isEmpty()) View.VISIBLE else View.GONE
+                loaded = all
+                render()
             },
             onError = { e ->
                 if (!isAdded) return@async
@@ -105,6 +161,166 @@ class HobbyFragment : Fragment() {
                 empty.visibility = View.VISIBLE
                 empty.text = "読み込みエラー: ${Api.friendlyMessage(e)}"
             }
+        )
+    }
+
+    /** 読み直さずに並べ直す。並び順や折りたたみを変えたときはこちらだけ */
+    private fun render() {
+        if (!isAdded) return
+        val rows = TaskList.build(
+            loaded, sortMode(), Prefs.collapsed(requireContext()),
+            Prefs.doneAtBottom(requireContext())
+        )
+        adapter.submit(rows)
+        empty.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
+        empty.text = "タスクはありません"
+    }
+
+    // ---- 並び替えモード ----
+
+    private fun startReorder() {
+        if (adapter.reordering) return
+        val ctx = requireContext().applicationContext
+        if (!Repo.current(ctx).supportsReorder) {
+            Toast.makeText(requireContext(), "並び替えは端末内モードだけです", Toast.LENGTH_SHORT).show()
+            return
+        }
+        adapter.reordering = true
+        reorderBar.visibility = View.VISIBLE
+        swipe.isEnabled = false   // 下に引く操作がドラッグと喧嘩する
+    }
+
+    private fun endReorder() {
+        adapter.reordering = false
+        reorderBar.visibility = View.GONE
+        swipe.isEnabled = true
+        load()
+    }
+
+    /**
+     * 並び替えモード中だけ効くドラッグとスワイプ。
+     *
+     * - 上下：同じ親を持つもの同士だけ入れ替える（親をまたぐと階層が壊れる）
+     * - 右へ払う：すぐ上の兄弟の子になる
+     * - 左へ払う：子をやめて親の隣に上がる
+     *
+     * 優先度順で並べている時に上下へ動かすと、**落とした先の優先度に合わせる**。
+     * 優先度は低中高の3段しかないので、順番そのものより「どの塊に入れたか」が答えになる。
+     */
+    private inner class ReorderCallback : ItemTouchHelper.Callback() {
+
+        override fun isLongPressDragEnabled(): Boolean = adapter.reordering
+        override fun isItemViewSwipeEnabled(): Boolean = adapter.reordering
+
+        override fun getMovementFlags(
+            rv: RecyclerView, holder: RecyclerView.ViewHolder
+        ): Int {
+            if (!adapter.reordering) return 0
+            return makeMovementFlags(
+                ItemTouchHelper.UP or ItemTouchHelper.DOWN,
+                ItemTouchHelper.START or ItemTouchHelper.END
+            )
+        }
+
+        override fun onMove(
+            rv: RecyclerView, holder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder
+        ): Boolean {
+            val from = holder.bindingAdapterPosition
+            val to = target.bindingAdapterPosition
+            // 兄弟同士でなければ動かさない。ここを許すと木がねじれる
+            if (adapter.rows().getOrNull(from)?.item?.parentId !=
+                adapter.rows().getOrNull(to)?.item?.parentId
+            ) return false
+            adapter.moveVisually(from, to)
+            return true
+        }
+
+        override fun clearView(rv: RecyclerView, holder: RecyclerView.ViewHolder) {
+            super.clearView(rv, holder)
+            if (!adapter.reordering) return
+            persistOrder(holder.bindingAdapterPosition)
+        }
+
+        override fun onSwiped(holder: RecyclerView.ViewHolder, direction: Int) {
+            val pos = holder.bindingAdapterPosition
+            val rows = adapter.rows()
+            val item = rows.getOrNull(pos)?.item ?: return
+            if (direction == ItemTouchHelper.END) {
+                val newParent = TaskList.indentTarget(rows, pos)
+                if (newParent == null) {
+                    Toast.makeText(requireContext(), "上に兄弟がないので子にできません", Toast.LENGTH_SHORT).show()
+                    render(); return
+                }
+                applyParent(item.id, newParent)
+            } else {
+                if (!TaskList.canOutdent(rows, pos)) {
+                    Toast.makeText(requireContext(), "もう最上位です", Toast.LENGTH_SHORT).show()
+                    render(); return
+                }
+                applyParent(item.id, TaskList.outdentParent(rows, pos))
+            }
+        }
+    }
+
+    /** ドラッグを離した時点の並びを保存する */
+    private fun persistOrder(droppedAt: Int) {
+        val rows = adapter.rows()
+        val moved = rows.getOrNull(droppedAt)?.item ?: return
+        val siblings = rows.filter { it.item.parentId == moved.parentId }.map { it.item.id }
+        val ctx = requireContext().applicationContext
+        val newPriority =
+            if (sortMode() == TaskSort.PRIORITY)
+                TaskList.priorityAfterMove(rows, moved.id, droppedAt)
+            else null
+
+        Api.async(
+            work = {
+                val repo = Repo.current(ctx)
+                repo.reorderHobby(ctx, siblings)
+                if (newPriority != null && newPriority != moved.priority) {
+                    repo.setHobbyPriority(ctx, moved.id, newPriority)
+                }
+            },
+            onSuccess = {
+                if (!isAdded) return@async
+                if (newPriority != null && newPriority != moved.priority) {
+                    val label = when { newPriority >= 8 -> "高"; newPriority <= 3 -> "低"; else -> "中" }
+                    Toast.makeText(requireContext(), "「${moved.name}」の優先度を$label にしました", Toast.LENGTH_SHORT).show()
+                }
+                loadKeepingMode()
+            },
+            onError = { e ->
+                if (!isAdded) return@async
+                Toast.makeText(requireContext(), "並び替えを保存できませんでした: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
+                loadKeepingMode()
+            }
+        )
+    }
+
+    private fun applyParent(id: Long, parentId: Long?) {
+        val ctx = requireContext().applicationContext
+        Api.async(
+            work = { Repo.current(ctx).setHobbyParent(ctx, id, parentId) },
+            onSuccess = { if (isAdded) loadKeepingMode() },
+            onError = { e ->
+                if (!isAdded) return@async
+                Toast.makeText(requireContext(), "変更できませんでした: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
+                loadKeepingMode()
+            }
+        )
+    }
+
+    /** 並び替えモードを抜けずに読み直す */
+    private fun loadKeepingMode() {
+        val ctx = requireContext().applicationContext
+        Api.async(
+            work = { Repo.current(ctx).getHobby(ctx) },
+            onSuccess = { all ->
+                if (!isAdded) return@async
+                loaded = all
+                render()
+            },
+            onError = { /* 直前の表示のままにする */ }
         )
     }
 

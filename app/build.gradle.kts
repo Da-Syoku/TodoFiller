@@ -22,10 +22,25 @@ val keystorePropsFile = rootProject.file("../keystore/keystore.properties")
 val keystoreProps = Properties().apply {
     if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
 }
-val hasReleaseKey = keystoreProps.getProperty("storeFile")?.let { file(it).exists() } == true
+
+/**
+ * デバッグ鍵で署名したリリースビルドを作る（`-PuseDebugKey=true`）。
+ *
+ * **鍵を変えると上書き更新できない。** Android は署名が違うAPKの上書きを拒否し、
+ * 端末には「アプリがインストールされていません」としか出ない。
+ * v18までがデバッグ鍵で配られているので、そのまま更新を届けたい間はこちらを使う。
+ * リリース鍵へ移る時は、一度アンインストールが要る＝**端末内のデータが消える**ので、
+ * 先にバックアップを取ってから切り替えること。
+ */
+val useDebugKey = (project.findProperty("useDebugKey") as String?)?.toBoolean() == true
+val debugKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
+val hasReleaseKey = if (useDebugKey) debugKeystore.exists()
+    else keystoreProps.getProperty("storeFile")?.let { file(it).exists() } == true
 if (!hasReleaseKey) {
     // 黙って未署名APKが出ると「リリース版を作ったつもり」で配ってしまう。必ず気付かせる。
-    logger.warn("警告: リリース署名鍵が見つかりません ($keystorePropsFile)。release ビルドは未署名になります。")
+    logger.warn("警告: 署名鍵が見つかりません。release ビルドは未署名になります。")
+} else if (useDebugKey) {
+    logger.lifecycle("注意: デバッグ鍵で署名します（-PuseDebugKey）。リリース鍵の版とは相互に上書きできません。")
 }
 
 android {
@@ -36,8 +51,8 @@ android {
         applicationId = "dev.togar.dynasched"
         minSdk = 26
         targetSdk = 34
-        versionCode = 25
-        versionName = "25.0"
+        versionCode = 26
+        versionName = "26.0"
         // バックエンドのベースURL。変えたい場合はここだけ書き換える。
         buildConfigField("String", "API_BASE_URL", "\"https://api.togar.dev\"")
     }
@@ -45,10 +60,18 @@ android {
     signingConfigs {
         if (hasReleaseKey) {
             create("release") {
-                storeFile = file(keystoreProps.getProperty("storeFile"))
-                storePassword = keystoreProps.getProperty("storePassword")
-                keyAlias = keystoreProps.getProperty("keyAlias")
-                keyPassword = keystoreProps.getProperty("keyPassword")
+                if (useDebugKey) {
+                    // Android SDK が作る共通のデバッグ鍵。パスワードは固定値
+                    storeFile = debugKeystore
+                    storePassword = "android"
+                    keyAlias = "androiddebugkey"
+                    keyPassword = "android"
+                } else {
+                    storeFile = file(keystoreProps.getProperty("storeFile"))
+                    storePassword = keystoreProps.getProperty("storePassword")
+                    keyAlias = keystoreProps.getProperty("keyAlias")
+                    keyPassword = keystoreProps.getProperty("keyPassword")
+                }
             }
         }
     }

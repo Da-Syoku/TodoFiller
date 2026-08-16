@@ -82,19 +82,44 @@ class LocalDb(ctx: Context) : SQLiteOpenHelper(ctx.applicationContext, NAME, nul
                 color TEXT DEFAULT '',
                 is_active INTEGER DEFAULT 1,
                 is_completed INTEGER DEFAULT 0,
-                completed_at TEXT
+                completed_at TEXT,
+                sort_order INTEGER DEFAULT 0
             )"""
         )
+        migrate(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // まだ初版。列を足す時はサーバー側と同じく「存在チェックしてALTER」の冪等ブロックで積む
         onCreate(db)
     }
 
+    /**
+     * 列の追加。サーバー側と同じく「無ければ足す」の冪等ブロックで積む。
+     * `onCreate` からも呼ぶので、新規作成でも更新でも同じ形になる。
+     */
+    private fun migrate(db: SQLiteDatabase) {
+        for ((table, column, decl) in MIGRATIONS) {
+            if (hasColumn(db, table, column)) continue
+            db.execSQL("ALTER TABLE $table ADD COLUMN $column $decl")
+        }
+    }
+
+    private fun hasColumn(db: SQLiteDatabase, table: String, column: String): Boolean =
+        db.rawQuery("PRAGMA table_info($table)", null).use { c ->
+            val idx = c.getColumnIndex("name")
+            while (c.moveToNext()) if (c.getString(idx) == column) return true
+            false
+        }
+
     companion object {
         private const val NAME = "skimas.db"
-        private const val VERSION = 1
+        /** 2: hobby_tasks.sort_order（手動の並び順） */
+        private const val VERSION = 2
+
+        /** (テーブル, 列, 定義) */
+        private val MIGRATIONS = listOf(
+            Triple("hobby_tasks", "sort_order", "INTEGER DEFAULT 0")
+        )
 
         @Volatile private var instance: LocalDb? = null
 

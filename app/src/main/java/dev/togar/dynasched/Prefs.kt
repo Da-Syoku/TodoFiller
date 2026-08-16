@@ -118,4 +118,32 @@ object Prefs {
     fun setImported(ctx: Context, done: Boolean) {
         sp(ctx).edit().putBoolean("imported", done).apply()
     }
+
+    // ---- 単発タスク画面の見せ方 ----
+
+    /** 並び順（TaskSort の名前で持つ） */
+    fun taskSort(ctx: Context): String = sp(ctx).getString("task_sort", "MANUAL") ?: "MANUAL"
+
+    fun setTaskSort(ctx: Context, name: String) {
+        sp(ctx).edit().putString("task_sort", name).apply()
+    }
+
+    /**
+     * 完了したタスクを下にまとめるか。false なら**その場に半透明で残す**。
+     * どちらが良いかは使ってみないと分からない類なので、両方残して切り替える。
+     */
+    fun doneAtBottom(ctx: Context): Boolean = sp(ctx).getBoolean("done_at_bottom", false)
+
+    fun setDoneAtBottom(ctx: Context, on: Boolean) {
+        sp(ctx).edit().putBoolean("done_at_bottom", on).apply()
+    }
+
+    /** 折りたたんでいる親タスクのID */
+    fun collapsed(ctx: Context): Set<Long> =
+        sp(ctx).getStringSet("task_collapsed", emptySet()).orEmpty()
+            .mapNotNull { it.toLongOrNull() }.toSet()
+
+    fun setCollapsed(ctx: Context, ids: Set<Long>) {
+        sp(ctx).edit().putStringSet("task_collapsed", ids.map { it.toString() }.toSet()).apply()
+    }
 }

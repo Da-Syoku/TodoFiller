@@ -16,6 +16,8 @@ data class HobbyItem(
     val note: String = "",           // 詳細メモ（自由記述）
     val priority: Int = 5,           // 優先度（3/5/8）
     val color: String = "",          // カレンダー色 colorId（"" は既定）
+    /** 手動で並び替えたときの順番。同じ親を持つもの同士でしか比べない */
+    val sortOrder: Int = 0,
     var level: Int = 0,
     var hasChildren: Boolean = false  // 子を持つタスクはチェックボックス非表示（葉のみ完了可能）
 ) {

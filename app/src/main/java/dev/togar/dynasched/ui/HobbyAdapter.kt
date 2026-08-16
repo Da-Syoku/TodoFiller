@@ -9,29 +9,55 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import dev.togar.dynasched.R
+import dev.togar.dynasched.api.CalColor
 import dev.togar.dynasched.api.HobbyItem
 
 /**
- * 単発タスクの階層リスト。level に応じてインデント表示。
- * level 0（親）のみ「＋子」ボタンを表示する（2階層モデル）。
+ * 単発タスクの階層リスト。
+ *
+ * 表示は [TaskList] が組んだ行をそのまま出すだけにしてある。
+ * 並び順・折りたたみ・完了のまとめ方をここで判断すると、
+ * 画面を動かさないと確かめられないものが増える。
+ *
+ * 並び替えモード中はボタン類を隠す。ドラッグ中に「削除」が押せると事故になる。
  */
 class HobbyAdapter(
     private val onToggle: (HobbyItem, Boolean) -> Unit,
     private val onAddChild: (HobbyItem) -> Unit,
     private val onDelete: (HobbyItem) -> Unit,
-    private val onEdit: (HobbyItem) -> Unit
+    private val onEdit: (HobbyItem) -> Unit,
+    private val onCollapse: (HobbyItem) -> Unit,
+    private val onLongPress: (HobbyItem) -> Unit
 ) : RecyclerView.Adapter<HobbyAdapter.VH>() {
 
-    private val items = ArrayList<HobbyItem>()
+    private val rows = ArrayList<TaskRow>()
 
-    fun submit(list: List<HobbyItem>) {
-        items.clear()
-        items.addAll(list)
+    /** 並び替えモード中か */
+    var reordering: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            notifyDataSetChanged()
+        }
+
+    fun submit(list: List<TaskRow>) {
+        rows.clear()
+        rows.addAll(list)
         notifyDataSetChanged()
+    }
+
+    fun rows(): List<TaskRow> = rows
+
+    /** ドラッグ中の見た目だけ先に入れ替える（保存は離した時） */
+    fun moveVisually(from: Int, to: Int) {
+        if (from !in rows.indices || to !in rows.indices) return
+        rows.add(to, rows.removeAt(from))
+        notifyItemMoved(from, to)
     }
 
     inner class VH(view: View) : RecyclerView.ViewHolder(view) {
         val root: LinearLayout = view.findViewById(R.id.itemRoot)
+        val expand: TextView = view.findViewById(R.id.expandToggle)
         val check: CheckBox = view.findViewById(R.id.checkBox)
         val title: TextView = view.findViewById(R.id.taskTitle)
         val sub: TextView = view.findViewById(R.id.taskSub)
@@ -41,90 +67,109 @@ class HobbyAdapter(
         val basePaddingStart: Int = view.paddingStart
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        val v = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_hobby, parent, false)
-        return VH(v)
-    }
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
+        VH(LayoutInflater.from(parent.context).inflate(R.layout.item_hobby, parent, false))
 
-    override fun getItemCount(): Int = items.size
+    override fun getItemCount(): Int = rows.size
 
     override fun onBindViewHolder(holder: VH, position: Int) {
-        val item = items[position]
+        val row = rows[position]
+        val item = row.item
+        val density = holder.itemView.resources.displayMetrics.density
 
         // インデント（子タスクは右にずらす。深い階層でも溢れないよう1段24dp）
-        val extra = (item.level * 24 * holder.itemView.resources.displayMetrics.density).toInt()
+        val extra = (row.level * 24 * density).toInt()
         holder.root.setPadding(
             holder.basePaddingStart + extra,
-            holder.root.paddingTop,
-            holder.root.paddingEnd,
-            holder.root.paddingBottom
+            holder.root.paddingTop, holder.root.paddingEnd, holder.root.paddingBottom
         )
 
-        // チェックボックスはリスナを一旦外してから状態を設定（リサイクル対策）
+        // 親は ▸/▾ で畳める。畳むと配下は行ごと消えて、親1行に要約が出る
+        if (row.hasChildren) {
+            holder.expand.visibility = View.VISIBLE
+            holder.expand.text = if (row.collapsed) "▸" else "▾"
+            holder.expand.setOnClickListener { onCollapse(item) }
+        } else {
+            holder.expand.visibility = View.GONE
+            holder.expand.setOnClickListener(null)
+        }
+
         holder.check.setOnCheckedChangeListener(null)
         holder.check.isChecked = item.isCompleted
         holder.title.text = item.name
-        // 完了なら打ち消し風にする
+        // 完了は薄くする。「下にまとめる」を切っている時はこれだけが手がかりになる
         holder.title.alpha = if (item.isCompleted) 0.5f else 1.0f
 
-        // タイトル左にカレンダー色のドットを表示（葉タスクのみ）
-        if (!item.hasChildren) {
+        // タイトル左にカレンダー色のドット（葉タスクのみ）
+        if (!row.hasChildren) {
             val d = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
-                val s = (10 * holder.itemView.resources.displayMetrics.density).toInt()
+                val s = (10 * density).toInt()
                 setSize(s, s)
-                setColor(dev.togar.dynasched.api.CalColor.colorFor(item.color))
+                setColor(CalColor.colorFor(item.color))
             }
             d.setBounds(0, 0, d.intrinsicWidth, d.intrinsicHeight)
             holder.title.setCompoundDrawablesRelative(d, null, null, null)
-            holder.title.compoundDrawablePadding =
-                (8 * holder.itemView.resources.displayMetrics.density).toInt()
+            holder.title.compoundDrawablePadding = (8 * density).toInt()
         } else {
             holder.title.setCompoundDrawablesRelative(null, null, null, null)
         }
 
-        // 行のテキスト部分をタップで編集（葉タスクのみ）
-        if (!item.hasChildren) {
-            holder.textContainer.setOnClickListener { onEdit(item) }
-        } else {
-            holder.textContainer.setOnClickListener(null)
-            holder.textContainer.isClickable = false
+        holder.sub.visibility = View.VISIBLE
+        holder.sub.text = when {
+            // 畳んだ親は1行に要約する（件数・済み・合計時間）
+            row.hasChildren && row.collapsed -> row.summary()
+            row.hasChildren -> ""
+            else -> leafSub(item)
         }
+        if (holder.sub.text.isEmpty()) holder.sub.visibility = View.GONE
 
-        // 葉タスクのみ必要時間・場所を表示（親＝グループは非表示）
-        if (item.hasChildren) {
-            holder.sub.visibility = View.GONE
-        } else {
-            holder.sub.visibility = View.VISIBLE
-            val h = item.durationMinutes / 60
-            val m = item.durationMinutes % 60
-            val dur = if (h > 0) "${h}時間${if (m > 0) "${m}分" else ""}" else "${m}分"
-            val base = "$dur ・ ${item.locationLabel()}"
-            // メモがあれば2行目に表示（長い場合は省略）
-            holder.sub.text = if (item.note.isNotBlank()) {
-                val memo = item.note.replace("\n", " ").let {
-                    if (it.length > 40) it.substring(0, 40) + "…" else it
-                }
-                "$base\n📝 $memo"
-            } else {
-                base
-            }
-        }
-
-        // 子を持つタスク（グループ）はチェック不可：葉タスクのみ完了できる
-        if (item.hasChildren) {
+        // 子を持つタスクはチェック不可：葉タスクのみ完了できる
+        if (row.hasChildren) {
             holder.check.visibility = View.INVISIBLE
         } else {
             holder.check.visibility = View.VISIBLE
-            holder.check.setOnCheckedChangeListener { _, isChecked ->
-                onToggle(item, isChecked)
-            }
+            holder.check.setOnCheckedChangeListener { _, isChecked -> onToggle(item, isChecked) }
         }
 
-        // どの階層でも子タスク（さらに細分化）を追加できる
-        holder.addChild.visibility = View.VISIBLE
-        holder.addChild.setOnClickListener { onAddChild(item) }
-        holder.delete.setOnClickListener { onDelete(item) }
+        if (reordering) {
+            // 並び替え中は編集も削除もさせない。ドラッグの手が当たって消えるのを防ぐ
+            holder.textContainer.setOnClickListener(null)
+            holder.textContainer.isClickable = false
+            holder.itemView.setOnLongClickListener(null)
+            holder.addChild.visibility = View.GONE
+            holder.delete.visibility = View.GONE
+            holder.check.isEnabled = false
+        } else {
+            holder.check.isEnabled = true
+            holder.addChild.visibility = View.VISIBLE
+            holder.delete.visibility = View.VISIBLE
+            holder.addChild.setOnClickListener { onAddChild(item) }
+            holder.delete.setOnClickListener { onDelete(item) }
+            // 行のテキスト部分をタップで編集（葉タスクのみ。親はタップで畳む）
+            if (!row.hasChildren) {
+                holder.textContainer.setOnClickListener { onEdit(item) }
+            } else {
+                holder.textContainer.setOnClickListener { onCollapse(item) }
+            }
+            holder.itemView.setOnLongClickListener { onLongPress(item); true }
+        }
+    }
+
+    private fun leafSub(item: HobbyItem): String {
+        val h = item.durationMinutes / 60
+        val m = item.durationMinutes % 60
+        val dur = if (h > 0) "${h}時間${if (m > 0) "${m}分" else ""}" else "${m}分"
+        val prio = when {
+            item.priority >= 8 -> "高"
+            item.priority <= 3 -> "低"
+            else -> "中"
+        }
+        val base = "$dur ・ ${item.locationLabel()} ・ 優先$prio"
+        if (item.note.isBlank()) return base
+        val memo = item.note.replace("\n", " ").let {
+            if (it.length > 40) it.substring(0, 40) + "…" else it
+        }
+        return "$base\n📝 $memo"
     }
 }

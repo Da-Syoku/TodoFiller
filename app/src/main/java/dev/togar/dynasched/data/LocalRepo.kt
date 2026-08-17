@@ -24,6 +24,7 @@ import dev.togar.dynasched.engine.MaterialRow
 import dev.togar.dynasched.engine.PlanEngine
 import dev.togar.dynasched.engine.Scheduler
 import dev.togar.dynasched.engine.StudyEngine
+import dev.togar.dynasched.ui.Tags
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -268,13 +269,14 @@ object LocalRepo : Repo {
                 note = c.str("note"),
                 priority = c.int("priority", 5),
                 color = c.str("color"),
-                sortOrder = c.int("sort_order")
+                sortOrder = c.int("sort_order"),
+                tags = c.str("tags")
             )
         }
 
     override fun addHobby(
         ctx: Context, name: String, parentId: Long?, durationMinutes: Int,
-        priority: Int, location: String, note: String, color: String
+        priority: Int, location: String, note: String, color: String, tags: String
     ) {
         val db = LocalDb.get(ctx).writableDatabase
         // 追加は同じ親の末尾へ。既存の手動順を崩さない
@@ -286,6 +288,7 @@ object LocalRepo : Repo {
         db.insert("hobby_tasks", null, values(
             "name" to name, "parent_id" to parentId, "duration_minutes" to durationMinutes,
             "priority" to priority, "location" to location, "note" to note, "color" to color,
+            "tags" to Tags.normalize(tags),
             "is_active" to 1, "is_completed" to 0, "sort_order" to next
         ))
     }
@@ -336,11 +339,12 @@ object LocalRepo : Repo {
 
     override fun editHobby(
         ctx: Context, id: Long, name: String, durationMinutes: Int,
-        priority: Int, location: String, note: String, color: String
+        priority: Int, location: String, note: String, color: String, tags: String
     ) {
         LocalDb.get(ctx).writableDatabase.update("hobby_tasks", values(
             "name" to name, "duration_minutes" to durationMinutes, "priority" to priority,
-            "location" to location, "note" to note, "color" to color
+            "location" to location, "note" to note, "color" to color,
+            "tags" to Tags.normalize(tags)
         ), "id=?", arrayOf(id.toString()))
     }
 
@@ -476,16 +480,25 @@ object LocalRepo : Repo {
 
     // ---- 提案 ----
 
-    override fun getSuggestions(ctx: Context, loc: String, min: Int, limit: Int): List<SuggestItem> {
+    override fun getSuggestions(
+        ctx: Context, loc: String, min: Int, limit: Int, tags: Set<String>
+    ): List<SuggestItem> {
         val out = ArrayList<SuggestItem>()
         val minutes = min.coerceIn(5, 600)
 
+        // タグで絞る時は、そのタグの付いた単発タスクだけを候補にする。
+        // 教材にはタグが無いので、絞り込み中は教材を出さない
+        val allowed = if (tags.isEmpty()) null
+            else getHobby(ctx).filter { Tags.hasAny(it, tags) }.mapTo(HashSet()) { it.id }
+
         for (h in hobbyRows(ctx)) {
+            if (allowed != null && h.id !in allowed) continue
             val dur = maxOf(15, h.durationMinutes)
             if (dur > minutes) continue
             if (!(h.location == "anywhere" || loc == "anywhere" || h.location == loc)) continue
             out.add(SuggestItem("hobby", h.id, h.name, dur, h.priority, 0))
         }
+        if (allowed != null) return out.take(limit.coerceIn(1, 100))
 
         val eng = engine(ctx)
         val todayMs = System.currentTimeMillis()

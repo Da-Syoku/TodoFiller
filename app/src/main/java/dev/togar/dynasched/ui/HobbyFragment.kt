@@ -31,7 +31,6 @@ class HobbyFragment : Fragment() {
     private lateinit var adapter: HobbyAdapter
     private lateinit var swipe: SwipeRefreshLayout
     private lateinit var empty: TextView
-    private lateinit var dragHint: View
     private lateinit var dragHintText: TextView
     private lateinit var sortButton: Button
     private lateinit var touchHelper: ItemTouchHelper
@@ -46,7 +45,6 @@ class HobbyFragment : Fragment() {
 
         empty = root.findViewById(R.id.emptyText)
         swipe = root.findViewById(R.id.swipeRefresh)
-        dragHint = root.findViewById(R.id.dragHintBar)
         dragHintText = root.findViewById(R.id.dragHintText)
         sortButton = root.findViewById(R.id.sortButton)
         val recycler = root.findViewById<RecyclerView>(R.id.recycler)
@@ -84,8 +82,10 @@ class HobbyFragment : Fragment() {
     private fun sortMode(): TaskSort = TaskSort.from(Prefs.taskSort(requireContext()))
 
     private fun updateSortLabel() {
-        val done = if (Prefs.doneAtBottom(requireContext())) "済↓" else "済＝"
-        sortButton.text = "${shortLabel(sortMode())} / $done"
+        val filter = Prefs.tagFilter(requireContext())
+        sortButton.text = if (filter.isEmpty()) shortLabel(sortMode())
+        // 絞り込み中はそれを最初に見せる。気付かないまま「タスクが消えた」と思うのを防ぐ
+        else "#${filter.first()}${if (filter.size > 1) "+${filter.size - 1}" else ""}"
     }
 
     private fun shortLabel(s: TaskSort) = when (s) {
@@ -97,32 +97,63 @@ class HobbyFragment : Fragment() {
         TaskSort.SHORTEST -> "短い順"
     }
 
-    /** 並び順と「完了の見せ方」をまとめて選ぶ */
+    /** 並び順と「完了の見せ方」、タグの絞り込みをまとめて選ぶ */
     private fun showViewMenu() {
         val ctx = requireContext()
         val sorts = TaskSort.entries
         val doneBottom = Prefs.doneAtBottom(ctx)
+        val filter = Prefs.tagFilter(ctx)
         val labels = sorts.map { if (it == sortMode()) "● ${it.label}" else "　${it.label}" } +
             listOf(
                 if (doneBottom) "● 完了したものを下にまとめる" else "　完了したものを下にまとめる",
-                if (!doneBottom) "● 完了したものはその場に薄く残す" else "　完了したものはその場に薄く残す"
-            ) +
-            listOf("　すべて畳む", "　すべて開く")
+                if (!doneBottom) "● 完了したものはその場に薄く残す" else "　完了したものはその場に薄く残す",
+                if (filter.isEmpty()) "　タグで絞り込む" else "● タグで絞り込む（${filter.size}個）",
+                "　すべて畳む", "　すべて開く"
+            )
 
         AlertDialog.Builder(ctx)
             .setTitle("並び順と表示")
             .setItems(labels.toTypedArray()) { _, i ->
+                val extra = i - sorts.size   // 並び順の後ろに続く項目の番号
                 when {
-                    i < sorts.size -> Prefs.setTaskSort(ctx, sorts[i].name)
-                    i == sorts.size -> Prefs.setDoneAtBottom(ctx, true)
-                    i == sorts.size + 1 -> Prefs.setDoneAtBottom(ctx, false)
-                    i == sorts.size + 2 -> Prefs.setCollapsed(ctx, allParentIds())
+                    extra < 0 -> Prefs.setTaskSort(ctx, sorts[i].name)
+                    extra == 0 -> Prefs.setDoneAtBottom(ctx, true)
+                    extra == 1 -> Prefs.setDoneAtBottom(ctx, false)
+                    extra == 2 -> { showTagFilter(); return@setItems }
+                    extra == 3 -> Prefs.setCollapsed(ctx, allParentIds())
                     else -> Prefs.setCollapsed(ctx, emptySet())
                 }
                 updateSortLabel()
                 render()
             }
             .setNegativeButton("閉じる", null)
+            .show()
+    }
+
+    /** タグで一覧を絞る。当てはまる枝だけを残し、木の形は保つ */
+    private fun showTagFilter() {
+        val ctx = requireContext()
+        val known = Tags.known(loaded)
+        if (known.isEmpty()) {
+            Toast.makeText(ctx, "まだタグがありません。タスクを編集して付けてください", Toast.LENGTH_LONG).show()
+            return
+        }
+        val selected = Prefs.tagFilter(ctx).toMutableSet()
+        val checked = BooleanArray(known.size) { selected.contains(known[it]) }
+        AlertDialog.Builder(ctx)
+            .setTitle("タグで絞り込む")
+            .setMultiChoiceItems(known.toTypedArray(), checked) { _, which, isChecked ->
+                if (isChecked) selected.add(known[which]) else selected.remove(known[which])
+            }
+            .setPositiveButton("絞り込む") { _, _ ->
+                Prefs.setTagFilter(ctx, selected)
+                updateSortLabel(); render()
+            }
+            .setNeutralButton("絞り込みをやめる") { _, _ ->
+                Prefs.setTagFilter(ctx, emptySet())
+                updateSortLabel(); render()
+            }
+            .setNegativeButton("やめる", null)
             .show()
     }
 
@@ -159,16 +190,17 @@ class HobbyFragment : Fragment() {
         )
     }
 
-    /** 読み直さずに並べ直す。並び順や折りたたみを変えたときはこちらだけ */
+    /** 読み直さずに並べ直す。並び順・折りたたみ・絞り込みを変えたときはこちらだけ */
     private fun render() {
         if (!isAdded) return
-        val rows = TaskList.build(
-            loaded, sortMode(), Prefs.collapsed(requireContext()),
-            Prefs.doneAtBottom(requireContext())
-        )
+        val ctx = requireContext()
+        val filter = Prefs.tagFilter(ctx)
+        val visible = Tags.filterTree(loaded, filter)
+        val rows = TaskList.build(visible, sortMode(), Prefs.collapsed(ctx), Prefs.doneAtBottom(ctx))
         adapter.submit(rows)
         empty.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
-        empty.text = "タスクはありません"
+        empty.text = if (filter.isEmpty()) "タスクはありません"
+            else "「#${filter.joinToString(" #")}」に当てはまるタスクはありません"
     }
 
     // ---- つかんで動かす ----
@@ -269,8 +301,31 @@ class HobbyFragment : Fragment() {
             super.clearView(rv, holder)
             adapter.draggingId = null
             swipe.isEnabled = true
-            dragHint.visibility = View.GONE
+            dragHintText.visibility = View.GONE
             applyDrop(dropIndex, dragLevel)
+        }
+
+        /**
+         * 画面の端まで持っていった時のスクロール速度。
+         *
+         * 既定の実装は**2秒かけて最高速まで上げる**ので、遠くへ運ぶほど待たされる。
+         * ここでは時間による加速をほぼ無くし、**はみ出した量だけで速度を決める**。
+         * 端に少し掛けたらゆっくり、深く押し込めば一気に流れる、という形にする。
+         */
+        override fun interpolateOutOfBoundsScroll(
+            rv: RecyclerView, viewSize: Int, viewSizeOutOfBounds: Int,
+            totalSize: Int, msSinceStartScroll: Long
+        ): Int {
+            val direction = if (viewSizeOutOfBounds > 0) 1 else -1
+            val depth = (Math.abs(viewSizeOutOfBounds).toFloat() / viewSize).coerceIn(0f, 1f)
+            val d = resources.displayMetrics.density
+            // 押し込み具合で 6dp〜48dp / フレーム。指を止めても勝手には加速しない
+            val perFrame = (6f + 42f * depth) * d
+            // 動き出しだけごく短く鈍らせる（端に触れた瞬間に飛ばないように）
+            val warmUp = (0.5f + msSinceStartScroll / 200f).coerceAtMost(1f)
+            return (direction * perFrame * warmUp).toInt().let {
+                if (it == 0) direction else it
+            }
         }
     }
 
@@ -295,10 +350,10 @@ class HobbyFragment : Fragment() {
     }
 
     private fun showDragHint(level: Int) {
-        dragHint.visibility = View.VISIBLE
+        dragHintText.visibility = View.VISIBLE
         dragHintText.text = when (level) {
-            0 -> "最上位に置きます（右へずらすと子タスクになります）"
-            else -> "${level}段目 ＝ 上のタスクの子として置きます"
+            0 -> "最上位に置きます"
+            else -> "${level}段目（上のタスクの子）"
         }
     }
 
@@ -412,6 +467,10 @@ class HobbyFragment : Fragment() {
         val colorPalette = ColorPaletteView(ctx, dev.togar.dynasched.api.CalColor.indexOfId(item.color))
         root.addView(colorPalette)
 
+        root.addView(label("タグ"))
+        val tagInput = TagInputView(ctx, item.tags) { Tags.known(loaded) }
+        root.addView(tagInput)
+
         root.addView(label("メモ"))
         val noteInput = android.widget.EditText(ctx).apply {
             setText(item.note)
@@ -439,7 +498,12 @@ class HobbyFragment : Fragment() {
                 val note = noteInput.text.toString().trim()
                 val appCtx = requireContext().applicationContext
                 Api.async(
-                    work = { Repo.current(ctx).editHobby(appCtx, item.id, name, total, priority, location, note, color) },
+                    work = {
+                        Repo.current(ctx).editHobby(
+                            appCtx, item.id, name, total, priority, location, note, color,
+                            tagInput.value
+                        )
+                    },
                     onSuccess = {
                         if (!isAdded) return@async
                         Toast.makeText(requireContext(), "更新しました", Toast.LENGTH_SHORT).show()

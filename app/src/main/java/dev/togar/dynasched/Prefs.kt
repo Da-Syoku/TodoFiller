@@ -138,6 +138,14 @@ object Prefs {
         sp(ctx).edit().putBoolean("done_at_bottom", on).apply()
     }
 
+    /** 一覧を絞り込んでいるタグ。空なら絞らない */
+    fun tagFilter(ctx: Context): Set<String> =
+        sp(ctx).getStringSet("task_tag_filter", emptySet()).orEmpty()
+
+    fun setTagFilter(ctx: Context, tags: Set<String>) {
+        sp(ctx).edit().putStringSet("task_tag_filter", tags).apply()
+    }
+
     /** 折りたたんでいる親タスクのID */
     fun collapsed(ctx: Context): Set<Long> =
         sp(ctx).getStringSet("task_collapsed", emptySet()).orEmpty()

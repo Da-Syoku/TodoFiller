@@ -69,6 +69,20 @@ object FreeTimeDialog {
         val duration = DurationPickerView(activity, initial)
         root.addView(duration)
 
+        // タグで候補を絞れるようにする。「いま買い物系だけ見たい」を1タップで
+        val tagButton = android.widget.Button(activity).apply {
+            text = tagButtonLabel(emptySet())
+            textSize = 12f
+        }
+        var chosen: Set<String> = emptySet()
+        tagButton.setOnClickListener {
+            pickTags(activity, chosen) { picked ->
+                chosen = picked
+                tagButton.text = tagButtonLabel(picked)
+            }
+        }
+        root.addView(tagButton)
+
         AlertDialog.Builder(activity)
             .setTitle("暇なとき")
             .setView(root)
@@ -77,16 +91,45 @@ object FreeTimeDialog {
                 val loc = if (locGroup.checkedRadioButtonId == 2) "out" else "home"
                 val min = duration.totalMinutes.let { if (it <= 0) 30 else it }
                 Prefs.setWidgetLoc(ctx, loc)   // ウィジェットと設定を揃えておく
-                fetch(activity, loc, min)
+                fetch(activity, loc, min, chosen)
             }
             .show()
     }
 
-    private fun fetch(activity: Activity, loc: String, min: Int) {
+    private fun tagButtonLabel(tags: Set<String>): String =
+        if (tags.isEmpty()) "タグで絞る（いまは全部）" else "#${tags.joinToString(" #")}"
+
+    private fun pickTags(activity: Activity, current: Set<String>, onPick: (Set<String>) -> Unit) {
+        val ctx = activity.applicationContext
+        Api.async(
+            work = { Tags.known(Repo.current(ctx).getHobby(ctx)) },
+            onSuccess = { known ->
+                if (activity.isFinishing) return@async
+                if (known.isEmpty()) {
+                    Toast.makeText(activity, "まだタグがありません", Toast.LENGTH_SHORT).show()
+                    return@async
+                }
+                val selected = current.toMutableSet()
+                val checked = BooleanArray(known.size) { selected.contains(known[it]) }
+                AlertDialog.Builder(activity)
+                    .setTitle("タグで絞る")
+                    .setMultiChoiceItems(known.toTypedArray(), checked) { _, which, isChecked ->
+                        if (isChecked) selected.add(known[which]) else selected.remove(known[which])
+                    }
+                    .setPositiveButton("決定") { _, _ -> onPick(selected) }
+                    .setNeutralButton("全部見る") { _, _ -> onPick(emptySet()) }
+                    .setNegativeButton("やめる", null)
+                    .show()
+            },
+            onError = { /* 絞れないだけ */ }
+        )
+    }
+
+    private fun fetch(activity: Activity, loc: String, min: Int, tags: Set<String>) {
         val ctx = activity.applicationContext
         Toast.makeText(activity, "候補を探しています…", Toast.LENGTH_SHORT).show()
         Api.async(
-            work = { Repo.current(ctx).getSuggestions(ctx, loc, min, ALL) },
+            work = { Repo.current(ctx).getSuggestions(ctx, loc, min, ALL, tags) },
             onSuccess = { items ->
                 if (activity.isFinishing) return@async
                 showResult(activity, loc, min, items)

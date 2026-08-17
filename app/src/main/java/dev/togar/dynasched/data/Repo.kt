@@ -34,11 +34,11 @@ interface Repo {
     fun getHobby(ctx: Context): List<HobbyItem>
     fun addHobby(
         ctx: Context, name: String, parentId: Long?, durationMinutes: Int,
-        priority: Int, location: String, note: String, color: String
+        priority: Int, location: String, note: String, color: String, tags: String = ""
     )
     fun editHobby(
         ctx: Context, id: Long, name: String, durationMinutes: Int,
-        priority: Int, location: String, note: String, color: String
+        priority: Int, location: String, note: String, color: String, tags: String = ""
     )
     fun completeHobby(ctx: Context, id: Long)
     fun setHobbyCompleted(ctx: Context, id: Long, completed: Boolean)
@@ -72,7 +72,10 @@ interface Repo {
     /** 「間に合うのか」 */
     fun getPlan(ctx: Context, days: Int = 45): PlanResult
 
-    fun getSuggestions(ctx: Context, loc: String, min: Int, limit: Int): List<SuggestItem>
+    /** @param tags 空でなければ、このタグが付いた単発タスクだけを候補にする */
+    fun getSuggestions(
+        ctx: Context, loc: String, min: Int, limit: Int, tags: Set<String> = emptySet()
+    ): List<SuggestItem>
 
     companion object {
         /** いま有効な方式。設定で切り替える */

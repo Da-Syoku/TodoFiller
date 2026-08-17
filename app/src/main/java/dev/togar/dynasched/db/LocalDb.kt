@@ -113,12 +113,13 @@ class LocalDb(ctx: Context) : SQLiteOpenHelper(ctx.applicationContext, NAME, nul
 
     companion object {
         private const val NAME = "skimas.db"
-        /** 2: hobby_tasks.sort_order（手動の並び順） */
-        private const val VERSION = 2
+        /** 2: hobby_tasks.sort_order（手動の並び順） / 3: hobby_tasks.tags */
+        private const val VERSION = 3
 
         /** (テーブル, 列, 定義) */
         private val MIGRATIONS = listOf(
-            Triple("hobby_tasks", "sort_order", "INTEGER DEFAULT 0")
+            Triple("hobby_tasks", "sort_order", "INTEGER DEFAULT 0"),
+            Triple("hobby_tasks", "tags", "TEXT DEFAULT ''")
         )
 
         @Volatile private var instance: LocalDb? = null

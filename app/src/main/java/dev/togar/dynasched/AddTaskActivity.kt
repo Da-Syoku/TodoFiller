@@ -62,6 +62,9 @@ class AddTaskActivity : AppCompatActivity() {
         locationSpinner.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item, locationLabels
         )
+        // 家でやるものが大半なので「家のみ」を初期値にする。
+        // 「どこでも」始まりだと、外の枠にも置ける前提で配置されてしまう
+        locationSpinner.setSelection(locationValues.indexOf("home"))
         // 優先度はスワイプで選ぶ（スピナーを隠して同じ位置にスライダーを差し込む）
         prioritySpinner.visibility = android.view.View.GONE
         val prioritySlider = LabeledSlider(this, priorityValues.toList(), 5) { v ->
@@ -69,6 +72,16 @@ class AddTaskActivity : AppCompatActivity() {
         }
         val prioParent = prioritySpinner.parent as android.view.ViewGroup
         prioParent.addView(prioritySlider, prioParent.indexOfChild(prioritySpinner))
+
+        // タグ欄はメモの直前に差し込む（レイアウトを触らずに済ませる）
+        val tagInput = dev.togar.dynasched.ui.TagInputView(this, "") { knownTags }
+        val noteParent = noteInput.parent as android.view.ViewGroup
+        noteParent.addView(
+            TextView(this).apply { text = "タグ"; textSize = 12f },
+            noteParent.indexOfChild(noteInput)
+        )
+        noteParent.addView(tagInput, noteParent.indexOfChild(noteInput))
+        loadKnownTags()
 
         saveButton.setOnClickListener {
             val name = nameInput.text.toString().trim()
@@ -87,7 +100,10 @@ class AddTaskActivity : AppCompatActivity() {
             val ctx = applicationContext
             val pid = if (parentId != null && parentId >= 0) parentId else null
             Api.async(
-                work = { Repo.current(ctx).addHobby(ctx, name, pid, total, priority, location, note, color) },
+                work = {
+                    Repo.current(ctx)
+                        .addHobby(ctx, name, pid, total, priority, location, note, color, tagInput.value)
+                },
                 onSuccess = {
                     Toast.makeText(this, "追加しました", Toast.LENGTH_SHORT).show()
                     finish()
@@ -98,5 +114,17 @@ class AddTaskActivity : AppCompatActivity() {
                 }
             )
         }
+    }
+
+    /** 「選ぶ」に出す既存タグ。読み込む前に押されても落ちないよう空で始める */
+    private var knownTags: List<String> = emptyList()
+
+    private fun loadKnownTags() {
+        val ctx = applicationContext
+        Api.async(
+            work = { dev.togar.dynasched.ui.Tags.known(Repo.current(ctx).getHobby(ctx)) },
+            onSuccess = { knownTags = it },
+            onError = { /* 候補が出ないだけ。自由入力はできる */ }
+        )
     }
 }

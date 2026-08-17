@@ -40,29 +40,6 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- 掴んでいる間だけ出る帯。いま何段目に置こうとしているかを見せる -->
-    <LinearLayout
-        android:id="@+id/dragHintBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:background="@color/surface"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/dragHintText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textColor="@color/primary"
-            android:textSize="11sp" />
-    </LinearLayout>
-
     <!-- タスク追加（専用画面へ遷移） -->
     <Button
         android:id="@+id/addTaskButton"
@@ -100,6 +77,26 @@
                 android:text="タスクはありません"
                 android:textColor="@color/on_bg_dim"
                 android:textSize="15sp"
+                android:visibility="gone" />
+
+            <!-- 掴んでいる間だけ出す「いま何段目か」の表示。
+                 **リストの上に重ねる。** 帯として差し込むとリストの高さが変わり、
+                 掴んだ瞬間に一覧全体が跳ねてカクつく。 -->
+            <TextView
+                android:id="@+id/dragHintText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="8dp"
+                android:background="@color/surface"
+                android:elevation="8dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:text=""
+                android:textColor="@color/primary"
+                android:textSize="11sp"
                 android:visibility="gone" />
         </FrameLayout>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

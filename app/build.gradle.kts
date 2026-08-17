@@ -51,8 +51,8 @@ android {
         applicationId = "dev.togar.dynasched"
         minSdk = 26
         targetSdk = 34
-        versionCode = 28
-        versionName = "28.0"
+        versionCode = 29
+        versionName = "29.0"
         // バックエンドのベースURL。変えたい場合はここだけ書き換える。
         buildConfigField("String", "API_BASE_URL", "\"https://api.togar.dev\"")
     }

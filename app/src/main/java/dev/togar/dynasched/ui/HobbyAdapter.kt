@@ -162,11 +162,15 @@ class HobbyAdapter(
             item.priority <= 3 -> "低"
             else -> "中"
         }
-        val base = "$dur ・ ${item.locationLabel()} ・ 優先$prio"
-        if (item.note.isBlank()) return base
-        val memo = item.note.replace("\n", " ").let {
-            if (it.length > 40) it.substring(0, 40) + "…" else it
+        val base = StringBuilder("$dur ・ ${item.locationLabel()} ・ 優先$prio")
+        val tags = Tags.display(item.tags)
+        if (tags.isNotEmpty()) base.append("  $tags")
+        if (item.note.isNotBlank()) {
+            val memo = item.note.replace("\n", " ").let {
+                if (it.length > 40) it.substring(0, 40) + "…" else it
+            }
+            base.append("\n📝 $memo")
         }
-        return "$base\n📝 $memo"
+        return base.toString()
     }
 }

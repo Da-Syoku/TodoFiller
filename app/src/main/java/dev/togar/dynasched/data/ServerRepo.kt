@@ -25,14 +25,15 @@ object ServerRepo : Repo {
 
     override fun getHobby(ctx: Context): List<HobbyItem> = Api.getHobby(ctx)
 
+    // タグはサーバー側に列が無いので落ちる。端末内方式の機能として割り切る
     override fun addHobby(
         ctx: Context, name: String, parentId: Long?, durationMinutes: Int,
-        priority: Int, location: String, note: String, color: String
+        priority: Int, location: String, note: String, color: String, tags: String
     ) = Api.addHobby(ctx, name, parentId, durationMinutes, priority, location, note, color)
 
     override fun editHobby(
         ctx: Context, id: Long, name: String, durationMinutes: Int,
-        priority: Int, location: String, note: String, color: String
+        priority: Int, location: String, note: String, color: String, tags: String
     ) = Api.editHobby(ctx, id, name, durationMinutes, priority, location, note, color)
 
     override fun completeHobby(ctx: Context, id: Long) = Api.completeHobby(ctx, id)
@@ -63,6 +64,7 @@ object ServerRepo : Repo {
 
     override fun getPlan(ctx: Context, days: Int): PlanResult = Api.getPlan(ctx, days)
 
-    override fun getSuggestions(ctx: Context, loc: String, min: Int, limit: Int): List<SuggestItem> =
-        Api.getSuggestions(ctx, loc, min, limit)
+    override fun getSuggestions(
+        ctx: Context, loc: String, min: Int, limit: Int, tags: Set<String>
+    ): List<SuggestItem> = Api.getSuggestions(ctx, loc, min, limit)
 }

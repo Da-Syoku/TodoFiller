@@ -18,6 +18,8 @@ data class HobbyItem(
     val color: String = "",          // カレンダー色 colorId（"" は既定）
     /** 手動で並び替えたときの順番。同じ親を持つもの同士でしか比べない */
     val sortOrder: Int = 0,
+    /** タグ。カンマ区切りで1列に持つ（[dev.togar.dynasched.ui.Tags] が読み書きする） */
+    val tags: String = "",
     var level: Int = 0,
     var hasChildren: Boolean = false  // 子を持つタスクはチェックボックス非表示（葉のみ完了可能）
 ) {

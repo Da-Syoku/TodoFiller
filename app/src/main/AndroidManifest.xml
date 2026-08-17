@@ -104,6 +104,11 @@
             android:name=".notify.DailyRunReceiver"
             android:exported="false" />
 
+        <!-- 就寝時刻に「今日はここまで」を出す -->
+        <receiver
+            android:name=".notify.BedtimeReceiver"
+            android:exported="false" />
+
         <!-- ドパチルからの「この予定を中断する」を受けるレシーバ（署名一致必須） -->
         <receiver
             android:name=".integration.AbortSessionReceiver"

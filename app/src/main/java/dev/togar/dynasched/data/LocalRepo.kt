@@ -129,7 +129,12 @@ object LocalRepo : Repo {
 
         // 先に計画を立てて「応用を外す/周回を減らす」を確定させる。
         // 画面と配置がここで必ず一致する。
-        val plan = PlanEngine.build(materials, hobbies, snap.windows, snap.busy, eng, planDays)
+        val wake = Prefs.wakeMinutes(ctx)
+        val bed = Prefs.bedtimeMinutes(ctx)
+        val plan = PlanEngine.build(
+            materials, hobbies, snap.windows, snap.busy, eng, planDays,
+            wakeStart = wake, wakeEnd = bed
+        )
         for ((id, decision) in plan.decisions) {
             db.execSQL(
                 "UPDATE materials SET drop_advanced=?, planned_rounds=? WHERE id=?",
@@ -145,7 +150,8 @@ object LocalRepo : Repo {
         )
 
         val placed = Scheduler.run(
-            refreshed, hobbies, snap.windows, snap.busy, snap.examPeriods, eng, days
+            refreshed, hobbies, snap.windows, snap.busy, snap.examPeriods, eng, days,
+            wakeStart = wake, wakeEnd = bed
         )
         db.beginTransaction()
         try {
@@ -181,7 +187,7 @@ object LocalRepo : Repo {
             windows = snap.windows.size,
             busy = snap.busy.size,
             examPeriods = snap.examPeriods.size,
-            freeMinutes = freeMinutesWithin(snap, days),
+            freeMinutes = freeMinutesWithin(ctx, snap, days),
             materialsActive = refreshed.size,
             hobbiesActive = hobbies.size,
             placedStudy = placed.count { it.eventType == "study" },
@@ -193,8 +199,10 @@ object LocalRepo : Repo {
         )
     }
 
-    /** 配置対象の日数ぶんの空き時間（分） */
-    private fun freeMinutesWithin(snap: dev.togar.dynasched.calendar.CalendarSnapshot, days: Int): Int {
+    /** 配置対象の日数ぶんの空き時間（分）。就寝時刻より後は数えない */
+    private fun freeMinutesWithin(
+        ctx: Context, snap: dev.togar.dynasched.calendar.CalendarSnapshot, days: Int
+    ): Int {
         val cal = java.util.Calendar.getInstance().apply {
             set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
             set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
@@ -204,7 +212,10 @@ object LocalRepo : Repo {
             val ds = Scheduler.ymd((cal.clone() as java.util.Calendar).apply {
                 add(java.util.Calendar.DAY_OF_MONTH, i)
             })
-            for (f in Scheduler.computeFree(ds, snap.busy, snap.windows)) total += f.end - f.start
+            val free = Scheduler.computeFree(
+                ds, snap.busy, snap.windows, Prefs.wakeMinutes(ctx), Prefs.bedtimeMinutes(ctx)
+            )
+            for (f in free) total += f.end - f.start
         }
         return total
     }
@@ -451,7 +462,8 @@ object LocalRepo : Repo {
         val snap = CalendarRepo.read(ctx, days, Prefs.calendarId(ctx))
         val eng = engine(ctx)
         val outcome = PlanEngine.build(
-            materialRows(ctx), hobbyRows(ctx), snap.windows, snap.busy, eng, days
+            materialRows(ctx), hobbyRows(ctx), snap.windows, snap.busy, eng, days,
+            wakeStart = Prefs.wakeMinutes(ctx), wakeEnd = Prefs.bedtimeMinutes(ctx)
         )
         return PlanResult(
             items = outcome.rows.map { r ->

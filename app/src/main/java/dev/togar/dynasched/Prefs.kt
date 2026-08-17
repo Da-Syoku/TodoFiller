@@ -119,6 +119,35 @@ object Prefs {
         sp(ctx).edit().putBoolean("imported", done).apply()
     }
 
+    // ---- 起きている時間帯（アプリ全体で共有）----
+    //
+    // 勉強の配置だけでなく、「今日はここまで」の通知や「暇なとき」の上限にも効く。
+    // 分単位で持つ（0〜1439）。就寝が起床より前になる指定は受け付けない。
+
+    const val DEFAULT_WAKE = 6 * 60
+    const val DEFAULT_BEDTIME = 23 * 60
+
+    fun wakeMinutes(ctx: Context): Int =
+        sp(ctx).getInt("wake_min", DEFAULT_WAKE).coerceIn(0, 1439)
+
+    fun bedtimeMinutes(ctx: Context): Int =
+        sp(ctx).getInt("bedtime_min", DEFAULT_BEDTIME).coerceIn(0, 1439)
+            .let { if (it <= wakeMinutes(ctx)) DEFAULT_BEDTIME else it }
+
+    fun setWakeWindow(ctx: Context, wake: Int, bedtime: Int) {
+        sp(ctx).edit()
+            .putInt("wake_min", wake.coerceIn(0, 1439))
+            .putInt("bedtime_min", bedtime.coerceIn(0, 1439))
+            .apply()
+    }
+
+    /** 「今日はここまで」の通知を出すか */
+    fun bedtimeNotice(ctx: Context): Boolean = sp(ctx).getBoolean("bedtime_notice", true)
+
+    fun setBedtimeNotice(ctx: Context, on: Boolean) {
+        sp(ctx).edit().putBoolean("bedtime_notice", on).apply()
+    }
+
     // ---- 単発タスク画面の見せ方 ----
 
     /** 並び順（TaskSort の名前で持つ） */

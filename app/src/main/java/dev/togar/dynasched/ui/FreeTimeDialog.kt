@@ -62,12 +62,23 @@ object FreeTimeDialog {
             setPadding(0, dp(12), 0, 0)
         })
 
-        // 次の予定までの時間を初期値にする（そのまま押せば済むように）
-        val initial = Prefs.cachedEvents(ctx)
+        // 次の予定までの時間を初期値にする（そのまま押せば済むように）。
+        // ただし**就寝時刻を越える提案はしない**。越えて出すと、寝る時間を削る前提の
+        // 予定を毎回すすめることになる。
+        val untilBed = minutesUntilBedtime(ctx)
+        val initial = (Prefs.cachedEvents(ctx)
             ?.let { ScheduledEvent.freeMinutesUntilNext(ScheduledEvent.fromJsonArray(it)) }
-            ?: 30
+            ?: 30).let { if (untilBed in 1 until it) untilBed else it }
         val duration = DurationPickerView(activity, initial)
         root.addView(duration)
+
+        if (untilBed in 1..90) {
+            root.addView(TextView(activity).apply {
+                text = "就寝まであと${untilBed}分です"
+                textSize = 11f
+                setPadding(0, dp(4), 0, 0)
+            })
+        }
 
         // タグで候補を絞れるようにする。「いま買い物系だけ見たい」を1タップで
         val tagButton = android.widget.Button(activity).apply {
@@ -89,11 +100,20 @@ object FreeTimeDialog {
             .setNegativeButton("閉じる", null)
             .setPositiveButton("提案して") { _, _ ->
                 val loc = if (locGroup.checkedRadioButtonId == 2) "out" else "home"
-                val min = duration.totalMinutes.let { if (it <= 0) 30 else it }
+                val raw = duration.totalMinutes.let { if (it <= 0) 30 else it }
+                val cap = minutesUntilBedtime(ctx)
+                val min = if (cap in 1 until raw) cap else raw
                 Prefs.setWidgetLoc(ctx, loc)   // ウィジェットと設定を揃えておく
                 fetch(activity, loc, min, chosen)
             }
             .show()
+    }
+
+    /** 就寝時刻まであと何分か。すでに過ぎていれば 0 */
+    private fun minutesUntilBedtime(ctx: android.content.Context): Int {
+        val now = java.util.Calendar.getInstance()
+        val nowMin = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+        return (Prefs.bedtimeMinutes(ctx) - nowMin).coerceAtLeast(0)
     }
 
     private fun tagButtonLabel(tags: Set<String>): String =

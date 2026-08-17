@@ -47,6 +47,7 @@ class MainActivity : AppCompatActivity() {
         askNotificationPermission()
         syncNotifications()  // 予定タブを廃止したので、起動時に通知予約を更新する
         dev.togar.dynasched.notify.DailyRunReceiver.schedule(this)  // 毎日の自動実行を仕掛け直す
+        dev.togar.dynasched.notify.BedtimeReceiver.schedule(this)   // 「今日はここまで」
         UpdateChecker.check(this)  // オンライン更新の確認（新しい版があれば案内）
 
         val nav = findViewById<BottomNavigationView>(R.id.bottomNav)

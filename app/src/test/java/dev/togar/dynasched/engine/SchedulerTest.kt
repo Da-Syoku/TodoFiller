@@ -80,6 +80,44 @@ class SchedulerTest {
         assertEquals("360-480(home)", show(free))
     }
 
+    @Test
+    fun `就寝時刻を早めるとそこで打ち切られる`() {
+        // 設定した就寝時刻より後には置かない（アプリ全体で共有する設定）
+        val free = Scheduler.computeFree(
+            "2026-09-01", emptyList(), listOf(w("18:00:00", "23:00:00")),
+            wakeStart = 5 * 60, wakeEnd = 21 * 60
+        )
+        assertEquals("1080-1260(home)", show(free))
+    }
+
+    @Test
+    fun `早起きにすると朝の枠が使えるようになる`() {
+        val free = Scheduler.computeFree(
+            "2026-09-01", emptyList(), listOf(w("04:00:00", "08:00:00")),
+            wakeStart = 4 * 60, wakeEnd = 22 * 60
+        )
+        assertEquals("240-480(home)", show(free))
+    }
+
+    @Test
+    fun `就寝時刻より後には配置しない`() {
+        val base = jst(2026, 9, 1)
+        val d = ymd(base, 0)
+        val m = MaterialRow(
+            id = 1, name = "ワーク", totalProblems = 300, targetRounds = 1,
+            deadline = "${ymd(base, 10)}T23:59:00", sessionMinutes = 50
+        )
+        val placed = Scheduler.run(
+            listOf(m), emptyList(),
+            listOf(AvailabilityWindow("${d}T09:00:00", "${d}T23:00:00", "home", "自習", 1)),
+            emptyList(), emptyList(), StudyEngine(), 1, jst(2026, 9, 1, 8, 0),
+            wakeStart = 6 * 60, wakeEnd = 21 * 60
+        )
+        assertTrue("枠が出なかった", placed.isNotEmpty())
+        val last = placed.maxOf { it.end }
+        assertTrue("就寝(21:00)より後に置かれた: $last", last <= "${d}T21:00:00")
+    }
+
     // ---- 配置 ----
 
     private fun jst(y: Int, mo: Int, d: Int, h: Int = 0, mi: Int = 0): Long =

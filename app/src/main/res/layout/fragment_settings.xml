@@ -94,6 +94,42 @@
             android:text="サーバーのデータを端末へ取り込む"
             android:textColor="@color/primary" />
 
+        <!-- 起床〜就寝。勉強の配置だけでなく通知と「暇なとき」にも効く。 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="起きている時間帯"
+            android:textColor="@color/on_bg_dim"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="この外には予定を置きません。就寝時刻には「今日はここまで」を通知し、「暇なとき」の提案もここで打ち切ります。"
+            android:textColor="@color/on_bg_dim"
+            android:textSize="11sp" />
+
+        <Button
+            android:id="@+id/wakeWindowButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="06:00 〜 23:00"
+            android:textColor="@color/primary" />
+
+        <CheckBox
+            android:id="@+id/bedtimeNoticeCheck"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:buttonTint="@color/primary"
+            android:text="就寝時刻に「今日はここまで」を通知する"
+            android:textColor="@color/on_bg"
+            android:textSize="13sp" />
+
         <!-- 端末内完結にした以上、控えはここにしか無い。
              署名鍵の変更や機種変更ではアプリごと消えるので、書き出しは必須。 -->
         <TextView

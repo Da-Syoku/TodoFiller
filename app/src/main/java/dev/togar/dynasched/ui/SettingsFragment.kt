@@ -79,6 +79,7 @@ class SettingsFragment : Fragment() {
             fillDaysInput.setText(Prefs.fillDays(requireContext()).toString())
             runScheduler()
         }
+        setupWakeWindow(root)
         root.findViewById<Button>(R.id.backupExportButton).setOnClickListener {
             exportPicker.launch(dev.togar.dynasched.data.Backup.suggestedFileName())
         }
@@ -179,6 +180,50 @@ class SettingsFragment : Fragment() {
                 Toast.makeText(requireContext(), "失敗: ${Api.friendlyMessage(e)}", Toast.LENGTH_LONG).show()
             }
         )
+    }
+
+    // ---- 起きている時間帯 ----
+
+    /**
+     * 起床と就寝を決める。**アプリ全体で共有する設定**で、
+     * 配置の打ち切り・「今日はここまで」の通知・「暇なとき」の上限に効く。
+     */
+    private fun setupWakeWindow(root: View) {
+        val button = root.findViewById<Button>(R.id.wakeWindowButton)
+        val check = root.findViewById<android.widget.CheckBox>(R.id.bedtimeNoticeCheck)
+        val ctx = requireContext()
+
+        fun hhmm(m: Int) = String.format(java.util.Locale.US, "%02d:%02d", m / 60, m % 60)
+        fun refresh() {
+            button.text = "${hhmm(Prefs.wakeMinutes(ctx))} 〜 ${hhmm(Prefs.bedtimeMinutes(ctx))}"
+        }
+        refresh()
+        check.isChecked = Prefs.bedtimeNotice(ctx)
+
+        check.setOnCheckedChangeListener { _, on ->
+            Prefs.setBedtimeNotice(ctx, on)
+            dev.togar.dynasched.notify.BedtimeReceiver.schedule(ctx)
+        }
+
+        button.setOnClickListener {
+            val wake = Prefs.wakeMinutes(ctx)
+            android.app.TimePickerDialog(ctx, { _, h, m ->
+                val newWake = h * 60 + m
+                val bed = Prefs.bedtimeMinutes(ctx)
+                android.app.TimePickerDialog(ctx, { _, bh, bm ->
+                    val newBed = bh * 60 + bm
+                    if (newBed <= newWake) {
+                        // 日をまたぐ指定は扱っていない。黙って直すより言って止める
+                        Toast.makeText(ctx, "就寝は起床より後にしてください", Toast.LENGTH_LONG).show()
+                        return@TimePickerDialog
+                    }
+                    Prefs.setWakeWindow(ctx, newWake, newBed)
+                    refresh()
+                    dev.togar.dynasched.notify.BedtimeReceiver.schedule(ctx)
+                    Toast.makeText(ctx, "次の再生成から反映されます", Toast.LENGTH_SHORT).show()
+                }, bed / 60, bed % 60, true).apply { setTitle("就寝時刻") }.show()
+            }, wake / 60, wake % 60, true).apply { setTitle("起床時刻") }.show()
+        }
     }
 
     // ---- バックアップ ----

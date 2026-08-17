@@ -65,7 +65,8 @@ object PlanEngine {
      * ここが端末内完結にした素直な利点で、見積もりが推定でなく実測になる。
      */
     private fun buildPool(
-        windows: List<AvailabilityWindow>, busy: List<BusyBlock>, days: Int, nowMillis: Long
+        windows: List<AvailabilityWindow>, busy: List<BusyBlock>, days: Int, nowMillis: Long,
+        wakeStart: Int, wakeEnd: Int
     ): List<Day> {
         val now = Calendar.getInstance().apply { timeInMillis = nowMillis }
         val todayMid = (now.clone() as Calendar).apply {
@@ -78,7 +79,7 @@ object PlanEngine {
             val c = (todayMid.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, i) }
             val ds = Scheduler.ymd(c)
             var mins = 0
-            for (iv in Scheduler.computeFree(ds, busy, windows)) {
+            for (iv in Scheduler.computeFree(ds, busy, windows, wakeStart, wakeEnd)) {
                 val s = if (i == 0) maxOf(iv.start, nowMin + 5) else iv.start
                 if (iv.end > s) mins += iv.end - s
             }
@@ -117,10 +118,12 @@ object PlanEngine {
         busy: List<BusyBlock>,
         engine: StudyEngine,
         days: Int = 45,
-        nowMillis: Long = System.currentTimeMillis()
+        nowMillis: Long = System.currentTimeMillis(),
+        wakeStart: Int = Scheduler.WAKE_START,
+        wakeEnd: Int = Scheduler.WAKE_END
     ): PlanOutcome {
         val d = days.coerceIn(1, 120)
-        val pool = buildPool(windows, busy, d, nowMillis)
+        val pool = buildPool(windows, busy, d, nowMillis, wakeStart, wakeEnd)
 
         // 単発タスクも同じ枠を食うので先に引いておく（配置は単発が優先されるため）
         val hobbyMinutes = hobbies.sumOf { maxOf(15, it.durationMinutes) }

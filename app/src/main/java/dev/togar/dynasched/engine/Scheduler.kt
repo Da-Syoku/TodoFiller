@@ -40,6 +40,13 @@ data class FreeSlot(val start: Int, val end: Int, val location: String)
 
 object Scheduler {
 
+    /**
+     * 起きている時間帯の既定値。
+     *
+     * 実際に使う値は設定（[dev.togar.dynasched.Prefs.wakeMinutes] /
+     * [dev.togar.dynasched.Prefs.bedtimeMinutes]）から渡す。ここは
+     * テストと、設定を読めない場面のための既定でしかない。
+     */
     const val WAKE_START = 6 * 60
     const val WAKE_END = 23 * 60
     const val DAYTIME_END = 18 * 60   // これ以前=昼(演習向き) / これ以降=夜(暗記向き)
@@ -102,17 +109,18 @@ object Scheduler {
      *   潰さないと同じ時刻に2件配置される）
      */
     fun computeFree(
-        dayStr: String, busyRows: List<BusyBlock>, availRows: List<AvailabilityWindow>
+        dayStr: String, busyRows: List<BusyBlock>, availRows: List<AvailabilityWindow>,
+        wakeStart: Int = WAKE_START, wakeEnd: Int = WAKE_END
     ): List<FreeSlot> {
         val busy = busyRows.mapNotNull { clipToDay(it.start, it.end, dayStr) }
-            .map { maxOf(it.first, WAKE_START)..minOf(it.last, WAKE_END) }
+            .map { maxOf(it.first, wakeStart)..minOf(it.last, wakeEnd) }
             .filter { it.last > it.first }
 
         val tagFree = ArrayList<FreeSlot>()
         for (w in availRows) {
             val c = clipToDay(w.start, w.end, dayStr) ?: continue
-            val s = maxOf(c.first, WAKE_START)
-            val e = minOf(c.last, WAKE_END)
+            val s = maxOf(c.first, wakeStart)
+            val e = minOf(c.last, wakeEnd)
             if (e <= s) continue
             val loc = if (w.location == "out") "out" else "home"
             for (p in subtractBusy(s, e, busy)) tagFree.add(FreeSlot(p.first, p.last, loc))
@@ -178,7 +186,9 @@ object Scheduler {
         exams: List<ExamPeriod>,
         engine: StudyEngine,
         days: Int,
-        nowMillis: Long = System.currentTimeMillis()
+        nowMillis: Long = System.currentTimeMillis(),
+        wakeStart: Int = WAKE_START,
+        wakeEnd: Int = WAKE_END
     ): List<PlacedEvent> {
         val d0 = days.coerceIn(1, 30)
         val now = Calendar.getInstance().apply { timeInMillis = nowMillis }
@@ -195,7 +205,7 @@ object Scheduler {
             val c = (todayMid.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, i) }
             val ds = ymd(c)
             dayStrs.add(ds)
-            freeByDay.add(computeFree(ds, busy, windows))
+            freeByDay.add(computeFree(ds, busy, windows, wakeStart, wakeEnd))
         }
 
         // 「枠のある日」の割合。締切までの全日数で割ると、平日に枠が無いほど

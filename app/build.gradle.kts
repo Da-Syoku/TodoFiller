@@ -26,11 +26,13 @@ val keystoreProps = Properties().apply {
 /**
  * デバッグ鍵で署名したリリースビルドを作る（`-PuseDebugKey=true`）。
  *
- * **鍵を変えると上書き更新できない。** Android は署名が違うAPKの上書きを拒否し、
+ * **配信中の版はデバッグ鍵（v31〜）。配る時は必ず `-PuseDebugKey=true` を付ける。**
+ *
+ * 鍵を変えると上書き更新できない。Android は署名が違うAPKの上書きを拒否し、
  * 端末には「アプリがインストールされていません」としか出ない。
- * v18までがデバッグ鍵で配られているので、そのまま更新を届けたい間はこちらを使う。
- * リリース鍵へ移る時は、一度アンインストールが要る＝**端末内のデータが消える**ので、
- * 先にバックアップを取ってから切り替えること。
+ * v29でリリース鍵へ移そうとしたが、そのたびにアンインストールと復元が要り、
+ * 得るものが無かったので戻した。**利用者が本人だけのうちは移す理由が無い。**
+ * 実際に配布する時が来たら、その時だけの作業として計画すること。
  */
 val useDebugKey = (project.findProperty("useDebugKey") as String?)?.toBoolean() == true
 val debugKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
@@ -51,8 +53,8 @@ android {
         applicationId = "dev.togar.dynasched"
         minSdk = 26
         targetSdk = 34
-        versionCode = 30
-        versionName = "30.0"
+        versionCode = 31
+        versionName = "31.0"
         // バックエンドのベースURL。変えたい場合はここだけ書き換える。
         buildConfigField("String", "API_BASE_URL", "\"https://api.togar.dev\"")
     }

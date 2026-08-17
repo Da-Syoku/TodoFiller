@@ -223,7 +223,63 @@ object UpdateChecker {
         throw Exception("リダイレクトが多すぎます")
     }
 
+    /**
+     * 署名鍵が同じかを、インストーラへ渡す前に確かめる。
+     *
+     * Android は署名の違うAPKの上書きを拒むが、画面には
+     * **「アプリがインストールされていません」としか出ない。**
+     * 落としたAPKが壊れているのか、容量が足りないのか、鍵が違うのかが
+     * 区別できず、原因に辿り着くまで時間を溶かす。実際2度やった。
+     * ここで先に見て、違うなら何をすればいいかを言葉で出す。
+     *
+     * @return 同じ鍵なら true。判定できない時も true（余計な邪魔をしない）
+     */
+    private fun sameSigningKey(activity: AppCompatActivity, apk: File): Boolean {
+        return try {
+            val pm = activity.packageManager
+            @Suppress("DEPRECATION")
+            val flag = android.content.pm.PackageManager.GET_SIGNATURES
+            @Suppress("DEPRECATION")
+            val downloaded = pm.getPackageArchiveInfo(apk.absolutePath, flag)?.signatures
+            @Suppress("DEPRECATION")
+            val installed = pm.getPackageInfo(activity.packageName, flag)?.signatures
+            if (downloaded.isNullOrEmpty() || installed.isNullOrEmpty()) return true
+            val a = downloaded.map { it.toCharsString() }.toSet()
+            val b = installed.map { it.toCharsString() }.toSet()
+            a == b
+        } catch (e: Exception) {
+            true   // 判定できないなら止めない
+        }
+    }
+
+    private fun warnDifferentKey(activity: AppCompatActivity, apk: File) {
+        AlertDialog.Builder(activity)
+            .setTitle("このまま上書きはできません")
+            .setMessage(
+                "新しいAPKは**別の鍵で署名**されています。\n" +
+                    "Androidは署名の違うアプリの上書きを拒むので、このまま進めても" +
+                    "「アプリがインストールされていません」と出るだけです。\n\n" +
+                    "入れ替えるには:\n" +
+                    "1. 設定 → バックアップを書き出す\n" +
+                    "2. このアプリをアンインストール\n" +
+                    "3. ブラウザで ${BuildConfig.API_BASE_URL}/app/dynasched.apk を開いて入れる\n" +
+                    "4. 起動 →「サーバーを使わずに始める」→ 設定 → バックアップから復元\n\n" +
+                    "**先にバックアップを取ってください。アンインストールで端末内のデータは消えます。**"
+            )
+            .setPositiveButton("わかった", null)
+            .setNegativeButton("それでも進む") { _, _ -> startInstaller(activity, apk) }
+            .show()
+    }
+
     private fun launchInstall(activity: AppCompatActivity, apk: File) {
+        if (!sameSigningKey(activity, apk)) {
+            warnDifferentKey(activity, apk)
+            return
+        }
+        startInstaller(activity, apk)
+    }
+
+    private fun startInstaller(activity: AppCompatActivity, apk: File) {
         try {
             val uri = FileProvider.getUriForFile(
                 activity, "${activity.packageName}.fileprovider", apk

@@ -52,10 +52,14 @@ android {
         applicationId = "dev.togar.dynasched"
         minSdk = 26
         targetSdk = 34
-        versionCode = 32
-        versionName = "32.0"
-        // バックエンドのベースURL。変えたい場合はここだけ書き換える。
-        buildConfigField("String", "API_BASE_URL", "\"https://api.togar.dev\"")
+        versionCode = 33
+        versionName = "33.0"
+        // 更新の確認先。GitHubの dist ブランチに最新版だけを置いてある。
+        // サーバーは畳んだので、通信はここ1本だけ。
+        buildConfigField(
+            "String", "UPDATE_MANIFEST_URL",
+            "\"https://raw.githubusercontent.com/togarinozawa/TodoFiller/dist/version.json\""
+        )
     }
 
     signingConfigs {

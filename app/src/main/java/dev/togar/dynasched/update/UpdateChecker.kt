@@ -156,7 +156,6 @@ object UpdateChecker {
                     launchInstall(activity, apk)
                 }
             } catch (e: Exception) {
-                Api.reportError(activity.applicationContext, "ota-download", e)
                 main.post {
                     if (!activity.isFinishing) dialog.dismiss()
                     Toast(activity, "ダウンロード失敗: ${e.message}")
@@ -262,8 +261,8 @@ object UpdateChecker {
                     "入れ替えるには:\n" +
                     "1. 設定 → バックアップを書き出す\n" +
                     "2. このアプリをアンインストール\n" +
-                    "3. ブラウザで ${BuildConfig.API_BASE_URL}/app/dynasched.apk を開いて入れる\n" +
-                    "4. 起動 →「サーバーを使わずに始める」→ 設定 → バックアップから復元\n\n" +
+                    "3. GitHubの dist ブランチから skimas.apk を落として入れる\n" +
+                    "4. 起動 → 設定 → バックアップから復元\n\n" +
                     "**先にバックアップを取ってください。アンインストールで端末内のデータは消えます。**"
             )
             .setPositiveButton("わかった", null)

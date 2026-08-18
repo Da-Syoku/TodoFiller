@@ -10,19 +10,8 @@ class App : Application() {
         // 通知チャンネルを起動時に必ず用意しておく
         Notifications.ensureChannel(this)
 
-        // API失敗の自動報告用にContextを渡す
         Api.appContext = applicationContext
-
-        // クラッシュ（未捕捉例外）をサーバーへ報告してから通常のクラッシュ処理へ渡す
-        val prev = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, e ->
-            try {
-                val t = Thread { Api.reportError(applicationContext, "crash", e) }
-                t.start()
-                t.join(3000) // 送信を最大3秒だけ待つ
-            } catch (ignore: Exception) {
-            }
-            prev?.uncaughtException(thread, e)
-        }
+        // クラッシュの自動報告はやめた。送り先のサーバーを畳んだので、
+        // 送っても誰も見られない。落ちたら普通に端末のログに残る。
     }
 }

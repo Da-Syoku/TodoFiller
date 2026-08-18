@@ -36,8 +36,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Dynasched">
 
+        <!-- singleTop: ウィジェットの「暇」で開き直したとき、作り直さず onNewIntent で受ける -->
         <activity
-            android:name=".LoginActivity"
+            android:name=".MainActivity"
+            android:launchMode="singleTop"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -45,29 +47,10 @@
             </intent-filter>
         </activity>
 
-        <!-- singleTop: ウィジェットの「暇」で開き直したとき、作り直さず onNewIntent で受ける -->
-        <activity
-            android:name=".MainActivity"
-            android:launchMode="singleTop"
-            android:exported="false" />
-
         <activity
             android:name=".AddTaskActivity"
             android:exported="false"
             android:label="タスクを追加" />
-
-        <!-- Googleログイン完了後のディープリンク dynasched://auth を受け取る -->
-        <activity
-            android:name=".AuthCallbackActivity"
-            android:exported="true"
-            android:launchMode="singleTask">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="dynasched" android:host="auth" />
-            </intent-filter>
-        </activity>
 
         <!-- 更新APKを他アプリ（インストーラ）に安全に渡すためのFileProvider -->
         <provider

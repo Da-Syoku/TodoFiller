@@ -25,7 +25,6 @@ class DailyRunReceiver : BroadcastReceiver() {
         val appCtx = context.applicationContext
         // 次回ぶんを先に取り直しておく（1回きりのアラームを毎日繋いでいく）
         schedule(appCtx)
-        if (!Prefs.localMode(appCtx)) return
 
         val pending = goAsync()
         Thread {

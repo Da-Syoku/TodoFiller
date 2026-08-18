@@ -1,7 +1,6 @@
 package dev.togar.dynasched.data
 
 import android.content.Context
-import dev.togar.dynasched.Prefs
 import dev.togar.dynasched.api.HobbyItem
 import dev.togar.dynasched.api.MaterialItem
 import dev.togar.dynasched.api.PlanResult
@@ -9,11 +8,14 @@ import dev.togar.dynasched.api.ScheduledEvent
 import dev.togar.dynasched.api.SuggestItem
 
 /**
- * データの出どころ。**サーバー方式と端末内方式の2つを両方持つ。**
+ * データの出どころ。**端末内で完結する [LocalRepo] だけ。**
  *
- * 端末内完結が目的だが、片方だけにすると移植で何か壊れた時に戻る先が無くなる。
- * 後から変えるのに工程が要る分岐なので、両方実装して設定で切り替える形にした。
- * 画面はこのインターフェースだけを見ればよく、どちらで動いているかを知らない。
+ * 以前はサーバーに問い合わせる実装も持っていて設定で切り替えていたが、
+ * 端末内方式で不足が出なくなったので消した。分岐が残っていると、
+ * 不具合を追うたびに「どちらで動いていたのか」から確かめる羽目になる。
+ *
+ * インターフェースは残してある。画面はここだけを見ればよく、
+ * DB・カレンダーの触り方を知らずに済む。
  *
  * すべてワーカースレッドから呼ぶこと（`Api.async` の中など）。
  */
@@ -44,21 +46,14 @@ interface Repo {
     fun setHobbyCompleted(ctx: Context, id: Long, completed: Boolean)
     fun deleteHobby(ctx: Context, id: Long)
 
-    /**
-     * 並び替え・階層の変更ができるか。
-     * サーバー側に対応する口が無いので、端末内方式だけ true。
-     * 画面はこれを見て並び替えモードの入口ごと隠す（押せるのに効かない、を作らない）。
-     */
-    val supportsReorder: Boolean get() = false
-
     /** 同じ親を持つタスクの並び順を、渡された順で保存する */
-    fun reorderHobby(ctx: Context, orderedIds: List<Long>) = Unit
+    fun reorderHobby(ctx: Context, orderedIds: List<Long>)
 
     /** 親を付け替える（子タスク化／子をやめる）。自分の子孫は親にできない */
-    fun setHobbyParent(ctx: Context, id: Long, parentId: Long?) = Unit
+    fun setHobbyParent(ctx: Context, id: Long, parentId: Long?)
 
     /** 優先度だけを変える（優先度順で並び替えたとき） */
-    fun setHobbyPriority(ctx: Context, id: Long, priority: Int) = Unit
+    fun setHobbyPriority(ctx: Context, id: Long, priority: Int)
 
     fun getMaterials(ctx: Context): List<MaterialItem>
     fun addMaterial(ctx: Context, m: MaterialInput)
@@ -78,9 +73,8 @@ interface Repo {
     ): List<SuggestItem>
 
     companion object {
-        /** いま有効な方式。設定で切り替える */
-        fun current(ctx: Context): Repo =
-            if (Prefs.localMode(ctx)) LocalRepo else ServerRepo
+        /** 実装は1つしかない。呼び出し側の形を変えずに済ませるために残している */
+        fun current(ctx: Context): Repo = LocalRepo
     }
 }
 

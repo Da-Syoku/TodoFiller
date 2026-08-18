@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
 import dev.togar.dynasched.data.Repo
-import dev.togar.dynasched.LoginActivity
 import dev.togar.dynasched.MainActivity
 import dev.togar.dynasched.Prefs
 import dev.togar.dynasched.R
@@ -78,7 +77,7 @@ class SuggestWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widgetLocToggle, broadcast(ACTION_TOGGLE_LOC, 1))
             views.setOnClickPendingIntent(R.id.widgetRefresh, broadcast(ACTION_REFRESH, 2))
             // 本体タップでアプリを開く
-            val open = Intent(ctx, LoginActivity::class.java)
+            val open = Intent(ctx, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             views.setOnClickPendingIntent(
                 R.id.widgetRoot,

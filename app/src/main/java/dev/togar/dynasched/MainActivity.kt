@@ -5,7 +5,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -35,13 +34,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // 端末内だけで動かす設定ならログインは要らない
-        if (!Prefs.localMode(this) && !Prefs.isLoggedIn(this)) {
-            startActivity(Intent(this, LoginActivity::class.java))
-            finish()
-            return
-        }
 
         setContentView(R.layout.activity_main)
         askNotificationPermission()
@@ -78,28 +70,6 @@ class MainActivity : AppCompatActivity() {
         if (intent.getBooleanExtra(EXTRA_SHOW_FREE_TIME, false)) {
             FreeTimeDialog.show(this)
         }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        // 端末内方式ではトークンを使わないので、失効の面倒を見る必要がない
-        if (Prefs.localMode(this)) return
-        // トークンが切れた時は、各画面がエラーを出す前にログインへ戻す
-        Api.onUnauthorized = {
-            if (!isFinishing && !isDestroyed) {
-                Prefs.logout(this)
-                Toast.makeText(this, "ログインの有効期限が切れました", Toast.LENGTH_LONG).show()
-                val intent = Intent(this, LoginActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                startActivity(intent)
-                finish()
-            }
-        }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        Api.onUnauthorized = null
     }
 
     /**

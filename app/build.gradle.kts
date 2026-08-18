@@ -8,8 +8,7 @@ plugins {
 /**
  * リリース署名の設定。
  *
- * このリポジトリは公開なので、鍵もパスワードもリポジトリの外
- * (`C:\Users\hai\skimas\keystore\`) に置いてある。
+ * このリポジトリは公開なので、鍵もパスワードもリポジトリの外に置いてある。
  *
  * **鍵かパスワードを失うと、配布済みアプリへ二度と更新を配れない。**
  * Android は別の鍵で署名されたAPKの上書きインストールを拒否するので、
@@ -53,8 +52,8 @@ android {
         applicationId = "dev.togar.dynasched"
         minSdk = 26
         targetSdk = 34
-        versionCode = 31
-        versionName = "31.0"
+        versionCode = 32
+        versionName = "32.0"
         // バックエンドのベースURL。変えたい場合はここだけ書き換える。
         buildConfigField("String", "API_BASE_URL", "\"https://api.togar.dev\"")
     }
@@ -109,7 +108,6 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
-    implementation("androidx.browser:browser:1.8.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     // テストのみ。APKには入らないので「外部ライブラリ不使用」の方針とは衝突しない
     testImplementation("junit:junit:4.13.2")

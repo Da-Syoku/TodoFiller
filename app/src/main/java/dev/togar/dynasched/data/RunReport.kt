@@ -10,8 +10,6 @@ package dev.togar.dynasched.data
  * 落とした理由をそのまま持ち帰る。
  */
 data class RunReport(
-    /** 端末内方式ではない（サーバーに投げたので中身が分からない） */
-    val serverMode: Boolean = false,
     val calendarName: String = "",
     val calendarWritable: Boolean = true,
     /** 何日先まで配置したか / 計画を見た日数 */
@@ -37,7 +35,6 @@ data class RunReport(
 
     /** 設定画面に出す本文 */
     fun describe(): String {
-        if (serverMode) return "サーバーに再生成を依頼しました。\n結果はサーバー側で処理されます。"
         val sb = StringBuilder()
         sb.append("カレンダー: ${calendarName.ifEmpty { "(見つかりません)" }}\n")
         if (!calendarWritable) sb.append("⚠ このカレンダーは読み取り専用です。書き込めません。\n")

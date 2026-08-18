@@ -205,11 +205,6 @@ class HobbyFragment : Fragment() {
 
     // ---- つかんで動かす ----
 
-    /** 並び替えできる方式か。毎フレーム問い合わせたくないので1度だけ見る */
-    private val canReorder: Boolean by lazy {
-        Repo.current(requireContext().applicationContext).supportsReorder
-    }
-
     /** つかんだ時の段。横のずれと足して落とし先の段を出す */
     private var dragBaseLevel = 0
     /** いま指が示している段 */
@@ -237,7 +232,6 @@ class HobbyFragment : Fragment() {
         override fun isItemViewSwipeEnabled(): Boolean = false
 
         override fun getMovementFlags(rv: RecyclerView, holder: RecyclerView.ViewHolder): Int {
-            if (!canReorder) return 0
             // **LEFT/RIGHT を入れないと横のずれが取れない。**
             // ItemTouchHelper は許可されていない向きの移動量を 0 に丸めるので、
             // 上下だけを許可していると onChildDraw に来る dX が常に 0 になり、

@@ -304,7 +304,6 @@ object LocalRepo : Repo {
         ))
     }
 
-    override val supportsReorder: Boolean get() = true
 
     override fun reorderHobby(ctx: Context, orderedIds: List<Long>) {
         val db = LocalDb.get(ctx).writableDatabase

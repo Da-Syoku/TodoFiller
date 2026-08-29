@@ -23,6 +23,18 @@
             android:textSize="13sp"
             android:textStyle="bold" />
 
+        <!-- タスクを足す。思いついた時にアプリを開かずに済ませるための入口 -->
+        <TextView
+            android:id="@+id/widgetAdd"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="＋"
+            android:textColor="@color/primary"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp" />
+
         <TextView
             android:id="@+id/widgetFree"
             android:layout_width="wrap_content"
@@ -84,6 +96,36 @@
         android:paddingTop="4dp" />
 
     <TextView
+        android:id="@+id/widgetLine4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/on_bg"
+        android:textSize="13sp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:paddingTop="4dp" />
+
+    <TextView
+        android:id="@+id/widgetLine5"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/on_bg"
+        android:textSize="13sp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:paddingTop="4dp" />
+
+    <TextView
+        android:id="@+id/widgetLine6"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/on_bg"
+        android:textSize="13sp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:paddingTop="4dp" />
+
+    <TextView
         android:id="@+id/widgetStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -91,5 +133,5 @@
         android:textSize="11sp"
         android:maxLines="1"
         android:ellipsize="end"
-        android:paddingTop="4dp" />
+        android:paddingTop="6dp" />
 </LinearLayout>

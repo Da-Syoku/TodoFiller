@@ -52,6 +52,12 @@
             android:exported="false"
             android:label="タスクを追加" />
 
+        <!-- 使い方の説明。初回起動で一度出し、以降は設定から開く -->
+        <activity
+            android:name=".ui.HelpActivity"
+            android:exported="false"
+            android:label="使い方" />
+
         <!-- 更新APKを他アプリ（インストーラ）に安全に渡すためのFileProvider -->
         <provider
             android:name="androidx.core.content.FileProvider"

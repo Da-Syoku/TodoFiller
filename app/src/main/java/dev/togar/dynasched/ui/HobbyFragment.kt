@@ -33,7 +33,11 @@ class HobbyFragment : Fragment() {
     private lateinit var empty: TextView
     private lateinit var dragHintText: TextView
     private lateinit var sortButton: Button
+    private lateinit var tabs: com.google.android.material.tabs.TabLayout
     private lateinit var touchHelper: ItemTouchHelper
+
+    /** タブを差し替えている最中か。差し替え中の選択通知で二重描画しないため */
+    private var rebuildingTabs = false
 
     /** 直近に読み込んだ生データ。並び替え・折りたたみは読み直さずに組み直す */
     private var loaded: List<HobbyItem> = emptyList()
@@ -47,6 +51,7 @@ class HobbyFragment : Fragment() {
         swipe = root.findViewById(R.id.swipeRefresh)
         dragHintText = root.findViewById(R.id.dragHintText)
         sortButton = root.findViewById(R.id.sortButton)
+        tabs = root.findViewById(R.id.taskTabs)
         val recycler = root.findViewById<RecyclerView>(R.id.recycler)
         val addButton = root.findViewById<Button>(R.id.addTaskButton)
 
@@ -66,6 +71,16 @@ class HobbyFragment : Fragment() {
             startActivity(Intent(requireContext(), AddTaskActivity::class.java))
         }
         sortButton.setOnClickListener { showViewMenu() }
+
+        tabs.addOnTabSelectedListener(object : com.google.android.material.tabs.TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: com.google.android.material.tabs.TabLayout.Tab) {
+                if (rebuildingTabs) return
+                Prefs.setTaskTab(requireContext(), tab.tag as? String ?: TaskTabs.ALL)
+                render()
+            }
+            override fun onTabUnselected(tab: com.google.android.material.tabs.TabLayout.Tab) = Unit
+            override fun onTabReselected(tab: com.google.android.material.tabs.TabLayout.Tab) = Unit
+        })
 
         swipe.setOnRefreshListener { load() }
         updateSortLabel()
@@ -108,6 +123,7 @@ class HobbyFragment : Fragment() {
                 if (doneBottom) "● 完了したものを下にまとめる" else "　完了したものを下にまとめる",
                 if (!doneBottom) "● 完了したものはその場に薄く残す" else "　完了したものはその場に薄く残す",
                 if (filter.isEmpty()) "　タグで絞り込む" else "● タグで絞り込む（${filter.size}個）",
+                "　横タブ: ${TabSource.from(Prefs.taskTabSource(ctx)).label}",
                 "　すべて畳む", "　すべて開く"
             )
 
@@ -120,7 +136,8 @@ class HobbyFragment : Fragment() {
                     extra == 0 -> Prefs.setDoneAtBottom(ctx, true)
                     extra == 1 -> Prefs.setDoneAtBottom(ctx, false)
                     extra == 2 -> { showTagFilter(); return@setItems }
-                    extra == 3 -> Prefs.setCollapsed(ctx, allParentIds())
+                    extra == 3 -> { showTabSource(); return@setItems }
+                    extra == 4 -> Prefs.setCollapsed(ctx, allParentIds())
                     else -> Prefs.setCollapsed(ctx, emptySet())
                 }
                 updateSortLabel()
@@ -157,6 +174,23 @@ class HobbyFragment : Fragment() {
             .show()
     }
 
+    /** タブに何を並べるかを選ぶ */
+    private fun showTabSource() {
+        val ctx = requireContext()
+        val sources = TabSource.entries
+        val cur = TabSource.from(Prefs.taskTabSource(ctx))
+        val labels = sources.map { if (it == cur) "● ${it.label}" else "　${it.label}" }
+        AlertDialog.Builder(ctx)
+            .setTitle("横に並べるタブ")
+            .setItems(labels.toTypedArray()) { _, i ->
+                Prefs.setTaskTabSource(ctx, sources[i].name)
+                Prefs.setTaskTab(ctx, TaskTabs.ALL)   // 中身が変わるので先頭へ戻す
+                rebuildTabs(); render()
+            }
+            .setNegativeButton("閉じる", null)
+            .show()
+    }
+
     private fun allParentIds(): Set<Long> =
         loaded.mapNotNull { it.parentId }.toSet()
 
@@ -179,6 +213,7 @@ class HobbyFragment : Fragment() {
                 if (!isAdded) return@async
                 swipe.isRefreshing = false
                 loaded = all
+                rebuildTabs()
                 render()
             },
             onError = { e ->
@@ -190,17 +225,55 @@ class HobbyFragment : Fragment() {
         )
     }
 
-    /** 読み直さずに並べ直す。並び順・折りたたみ・絞り込みを変えたときはこちらだけ */
+    /** いま選んでいるタブ。無くなっていたら「すべて」に戻す */
+    private fun currentTab(): String {
+        val ctx = requireContext()
+        val key = Prefs.taskTab(ctx)
+        val list = TaskTabs.tabs(loaded, TabSource.from(Prefs.taskTabSource(ctx)))
+        return if (TaskTabs.exists(list, key)) key else TaskTabs.ALL
+    }
+
+    /**
+     * タブを作り直す。中身（グループ／タグ）は増減するので、読み込みのたびに組み直す。
+     * 差し替え中の選択通知は無視する（作り直しただけで描画が走ると点滅する）。
+     */
+    private fun rebuildTabs() {
+        val ctx = requireContext()
+        val source = TabSource.from(Prefs.taskTabSource(ctx))
+        val list = TaskTabs.tabs(loaded, source)
+        if (list.isEmpty()) {
+            tabs.visibility = View.GONE
+            tabs.removeAllTabs()
+            return
+        }
+        val selected = currentTab()
+        rebuildingTabs = true
+        tabs.removeAllTabs()
+        for (t in list) {
+            val tab = tabs.newTab().setText(t.label)
+            tab.tag = t.key
+            tabs.addTab(tab, t.key == selected)
+        }
+        rebuildingTabs = false
+        tabs.visibility = View.VISIBLE
+    }
+
+    /** 読み直さずに並べ直す。並び順・折りたたみ・絞り込み・タブを変えたときはこちらだけ */
     private fun render() {
         if (!isAdded) return
         val ctx = requireContext()
         val filter = Prefs.tagFilter(ctx)
-        val visible = Tags.filterTree(loaded, filter)
+        val tabKey = currentTab()
+        val inTab = TaskTabs.apply(loaded, tabKey)
+        val visible = Tags.filterTree(inTab, filter)
         val rows = TaskList.build(visible, sortMode(), Prefs.collapsed(ctx), Prefs.doneAtBottom(ctx))
         adapter.submit(rows)
         empty.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
-        empty.text = if (filter.isEmpty()) "タスクはありません"
-            else "「#${filter.joinToString(" #")}」に当てはまるタスクはありません"
+        empty.text = when {
+            filter.isNotEmpty() -> "「#${filter.joinToString(" #")}」に当てはまるタスクはありません"
+            tabKey != TaskTabs.ALL -> "この中にタスクはありません"
+            else -> "タスクはありません"
+        }
     }
 
     // ---- つかんで動かす ----
@@ -232,6 +305,10 @@ class HobbyFragment : Fragment() {
         override fun isItemViewSwipeEnabled(): Boolean = false
 
         override fun getMovementFlags(rv: RecyclerView, holder: RecyclerView.ViewHolder): Int {
+            // タブで塊を選んでいる間は全体が見えていない。そこで階層をいじると、
+            // いま見えていない場所へタスクが飛んで「消えた」ように見える。
+            // 並び替えも階層変更も「すべて」タブに限る。
+            if (currentTab() != TaskTabs.ALL) return 0
             // **LEFT/RIGHT を入れないと横のずれが取れない。**
             // ItemTouchHelper は許可されていない向きの移動量を 0 に丸めるので、
             // 上下だけを許可していると onChildDraw に来る dX が常に 0 になり、
@@ -473,10 +550,27 @@ class HobbyFragment : Fragment() {
         }
         root.addView(noteInput)
 
+        // 子を持つタスク＝グループ。ここで決めた設定を配下へ配れるようにする。
+        // 1件ずつ開いて直すのは10件もあれば続かないし、
+        // グループ内で場所や優先度がばらばらだと配置も意図しない形になる。
+        val hasChildren = loaded.any { it.parentId == item.id }
+        val spread = HashMap<String, android.widget.CheckBox>()
+        if (hasChildren) {
+            root.addView(label("配下のタスクにも適用する"))
+            for ((key, text) in listOf(
+                "priority" to "優先度", "location" to "場所",
+                "color" to "色", "tags" to "タグ"
+            )) {
+                val cb = android.widget.CheckBox(ctx).apply { this.text = text; textSize = 13f }
+                spread[key] = cb
+                root.addView(cb)
+            }
+        }
+
         val scroll = android.widget.ScrollView(ctx).apply { addView(root) }
 
         androidx.appcompat.app.AlertDialog.Builder(ctx)
-            .setTitle("タスクを編集")
+            .setTitle(if (hasChildren) "グループを編集" else "タスクを編集")
             .setView(scroll)
             .setPositiveButton("保存") { _, _ ->
                 val name = nameInput.text.toString().trim()
@@ -491,16 +585,31 @@ class HobbyFragment : Fragment() {
                 val color = dev.togar.dynasched.api.CalColor.idAt(colorPalette.selectedIndex)
                 val note = noteInput.text.toString().trim()
                 val appCtx = requireContext().applicationContext
+                val tags = tagInput.value
+                val spreadCount = spread.count { it.value.isChecked }
                 Api.async(
                     work = {
-                        Repo.current(ctx).editHobby(
-                            appCtx, item.id, name, total, priority, location, note, color,
-                            tagInput.value
+                        val repo = Repo.current(ctx)
+                        repo.editHobby(
+                            appCtx, item.id, name, total, priority, location, note, color, tags
                         )
+                        if (spreadCount > 0) {
+                            repo.applyToSubtree(
+                                appCtx, item.id,
+                                priority = if (spread["priority"]?.isChecked == true) priority else null,
+                                location = if (spread["location"]?.isChecked == true) location else null,
+                                color = if (spread["color"]?.isChecked == true) color else null,
+                                tags = if (spread["tags"]?.isChecked == true) tags else null
+                            )
+                        }
                     },
                     onSuccess = {
                         if (!isAdded) return@async
-                        Toast.makeText(requireContext(), "更新しました", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            requireContext(),
+                            if (spreadCount > 0) "更新し、配下にも適用しました" else "更新しました",
+                            Toast.LENGTH_SHORT
+                        ).show()
                         load()
                     },
                     onError = { e ->

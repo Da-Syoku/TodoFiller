@@ -24,6 +24,16 @@ class SuggestWidgetProvider : AppWidgetProvider() {
         const val ACTION_TOGGLE_LOC = "dev.togar.dynasched.WIDGET_TOGGLE_LOC"
         const val ACTION_REFRESH = "dev.togar.dynasched.WIDGET_REFRESH"
 
+        /**
+         * 候補を並べる行。ウィジェットを大きくしたので6件まで見える。
+         * 3件しか見えないと「これしか無いのか」と思って結局アプリを開くことになり、
+         * ウィジェットの意味が薄れる。縮めた時は下の行が見えなくなるだけで害はない。
+         */
+        private val LINES = listOf(
+            R.id.widgetLine1, R.id.widgetLine2, R.id.widgetLine3,
+            R.id.widgetLine4, R.id.widgetLine5, R.id.widgetLine6
+        )
+
         /** キャッシュ済み予定から「次の未完了予定開始までの分数」を出す（無ければ60分） */
         private fun freeMinutes(ctx: Context): Int {
             val json = Prefs.cachedEvents(ctx) ?: return 60
@@ -42,8 +52,8 @@ class SuggestWidgetProvider : AppWidgetProvider() {
                 val locLabel = if (loc == "out") "外" else "家"
                 views.setTextViewText(R.id.widgetTitle, "いまできること（$locLabel・${min}分）")
                 try {
-                    val items = Repo.current(ctx).getSuggestions(ctx, loc, min, 3)
-                    val lines = listOf(R.id.widgetLine1, R.id.widgetLine2, R.id.widgetLine3)
+                    val items = Repo.current(ctx).getSuggestions(ctx, loc, min, LINES.size)
+                    val lines = LINES
                     for ((i, resId) in lines.withIndex()) {
                         if (i < items.size) {
                             val it = items[i]
@@ -58,9 +68,8 @@ class SuggestWidgetProvider : AppWidgetProvider() {
                         if (items.isEmpty()) "候補なし。ゆっくり休みましょう" else ""
                     )
                 } catch (e: Exception) {
-                    views.setTextViewText(R.id.widgetLine1, "取得できませんでした")
-                    views.setTextViewText(R.id.widgetLine2, "")
-                    views.setTextViewText(R.id.widgetLine3, "")
+                    views.setTextViewText(LINES[0], "取得できませんでした")
+                    for (id in LINES.drop(1)) views.setTextViewText(id, "")
                     views.setTextViewText(R.id.widgetStatus, "タップで再読み込み")
                 }
                 attachIntents(ctx, views)
@@ -82,6 +91,13 @@ class SuggestWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(
                 R.id.widgetRoot,
                 PendingIntent.getActivity(ctx, 3, open, flags)
+            )
+            // 「＋」→ タスク追加画面を直接開く。思いついた時にアプリを辿らずに済ませる
+            val add = Intent(ctx, dev.togar.dynasched.AddTaskActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            views.setOnClickPendingIntent(
+                R.id.widgetAdd,
+                PendingIntent.getActivity(ctx, 5, add, flags)
             )
             // 「暇」→ アプリを開いて条件入力ダイアログを出す
             val free = Intent(ctx, MainActivity::class.java)

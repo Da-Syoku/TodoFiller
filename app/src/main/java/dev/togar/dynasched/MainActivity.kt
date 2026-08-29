@@ -42,6 +42,12 @@ class MainActivity : AppCompatActivity() {
         dev.togar.dynasched.notify.BedtimeReceiver.schedule(this)   // 「今日はここまで」
         UpdateChecker.check(this)  // オンライン更新の確認（新しい版があれば案内）
 
+        // 初回だけ使い方を出す。カレンダーにタグを付けるという大前提を知らないと、
+        // 何を触っても予定が1件も出ないまま終わる
+        if (!Prefs.helpShown(this)) {
+            startActivity(Intent(this, dev.togar.dynasched.ui.HelpActivity::class.java))
+        }
+
         val nav = findViewById<BottomNavigationView>(R.id.bottomNav)
         nav.setOnItemSelectedListener { item ->
             val fragment: Fragment = when (item.itemId) {

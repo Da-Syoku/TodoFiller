@@ -52,6 +52,9 @@ class SettingsFragment : Fragment() {
         userText.text = "端末内で動いています。ログインもサーバーも使いません。"
         versionText.text = "現在のバージョン: v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
+        root.findViewById<Button>(R.id.helpButton).setOnClickListener {
+            startActivity(android.content.Intent(requireContext(), HelpActivity::class.java))
+        }
         resyncBtn.setOnClickListener { resyncNotifications() }
         root.findViewById<Button>(R.id.calendarCheckButton).setOnClickListener {
             CalendarCheckDialog.show(requireActivity())

@@ -338,6 +338,32 @@ object LocalRepo : Repo {
             .execSQL("UPDATE hobby_tasks SET priority=? WHERE id=?", arrayOf(priority, id))
     }
 
+    override fun applyToSubtree(
+        ctx: Context, parentId: Long,
+        priority: Int?, location: String?, color: String?, tags: String?
+    ) {
+        val sets = ArrayList<String>()
+        val args = ArrayList<Any>()
+        priority?.let { sets.add("priority=?"); args.add(it) }
+        location?.let { sets.add("location=?"); args.add(it) }
+        color?.let { sets.add("color=?"); args.add(it) }
+        tags?.let { sets.add("tags=?"); args.add(Tags.normalize(it)) }
+        if (sets.isEmpty()) return
+        // 親自身は既に保存済みなので配下だけ。孫より下まで全部降りる
+        args.add(parentId)
+        LocalDb.get(ctx).writableDatabase.execSQL(
+            "UPDATE hobby_tasks SET " + sets.joinToString(", ") +
+                " WHERE id IN (WITH RECURSIVE sub(id) AS (" +
+                "SELECT id FROM hobby_tasks WHERE parent_id=? " +
+                "UNION ALL SELECT h.id FROM hobby_tasks h JOIN sub s ON h.parent_id=s.id" +
+                ") SELECT id FROM sub)",
+            args.toTypedArray()
+        )
+    }
+
+    override fun getHobbyItem(ctx: Context, id: Long): HobbyItem? =
+        getHobby(ctx).firstOrNull { it.id == id }
+
     /** candidate が root の子孫か */
     private fun isDescendant(ctx: Context, candidate: Long, root: Long): Boolean =
         LocalDb.get(ctx).readableDatabase.rawQuery(

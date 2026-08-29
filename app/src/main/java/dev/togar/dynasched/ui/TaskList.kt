@@ -132,6 +132,15 @@ object TaskList {
         return if (doneAtBottom) compareBy<HobbyItem> { it.isCompleted }.then(inner) else inner
     }
 
+    /**
+     * ある親の配下すべて（親自身は含めない）。
+     * 親が抜けるので、直下の子が根として並ぶ。
+     */
+    fun descendantsOf(all: List<HobbyItem>, parentId: Long): List<HobbyItem> {
+        val keep = subtreeIds(all, parentId) - parentId
+        return all.filter { keep.contains(it.id) }
+    }
+
     /** ドロップ結果：新しい親と、その親の子の新しい並び */
     data class Drop(val parentId: Long?, val siblingIds: List<Long>, val level: Int)
 
@@ -195,4 +204,61 @@ object TaskList {
         val below = others.getOrNull(newIndex)?.item?.priority
         return above ?: below
     }
+}
+
+/** タブの中身を何にするか */
+enum class TabSource(val label: String) {
+    NONE("タブを出さない"),
+    GROUP("グループごと"),
+    TAG("タグごと");
+
+    companion object {
+        fun from(name: String?): TabSource = entries.firstOrNull { it.name == name } ?: NONE
+    }
+}
+
+/** 横に並ぶタブ1つ */
+data class TaskTab(val key: String, val label: String)
+
+/**
+ * タスクをグループ／タグで横に並べる。
+ *
+ * 木を深く辿るより、まず「どの塊の話か」を選ぶほうが速い場面がある。
+ * ただし**塊を選んでいる間は全体が見えない**ので、階層をいじる操作は
+ * 「すべて」タブに限る（見えていない場所へタスクが飛ぶ事故を作らないため）。
+ */
+object TaskTabs {
+
+    /** 「すべて」タブのキー。常に先頭に置く */
+    const val ALL = ""
+
+    fun tabs(all: List<HobbyItem>, source: TabSource): List<TaskTab> {
+        if (source == TabSource.NONE) return emptyList()
+        val head = TaskTab(ALL, "すべて")
+        return when (source) {
+            TabSource.GROUP -> {
+                val hasChild = all.mapNotNullTo(HashSet()) { it.parentId }
+                val groups = all.filter { hasChild.contains(it.id) }
+                    .sortedWith(TaskList.comparator(TaskSort.MANUAL, false))
+                    .map { TaskTab("g:${it.id}", it.name) }
+                listOf(head) + groups
+            }
+            TabSource.TAG -> listOf(head) + Tags.known(all).map { TaskTab("t:$it", "#$it") }
+            TabSource.NONE -> emptyList()
+        }
+    }
+
+    /** そのタブで見せるタスク。キーが古くて当てはまらない時は全部返す */
+    fun apply(all: List<HobbyItem>, key: String): List<HobbyItem> = when {
+        key.startsWith("g:") -> {
+            val id = key.removePrefix("g:").toLongOrNull()
+            // 親自身は出さない。タブの見出しが親の名前なので、繰り返しても意味が無い
+            if (id == null) all else TaskList.descendantsOf(all, id)
+        }
+        key.startsWith("t:") -> Tags.filterTree(all, setOf(key.removePrefix("t:")))
+        else -> all
+    }
+
+    /** そのキーのタブがまだ存在するか（グループを消した後などに効く） */
+    fun exists(tabs: List<TaskTab>, key: String): Boolean = tabs.any { it.key == key }
 }

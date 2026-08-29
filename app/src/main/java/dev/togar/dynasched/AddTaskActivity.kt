@@ -81,7 +81,19 @@ class AddTaskActivity : AppCompatActivity() {
             noteParent.indexOfChild(noteInput)
         )
         noteParent.addView(tagInput, noteParent.indexOfChild(noteInput))
-        loadKnownTags()
+
+        // 子タスクを足す時は、**親と同じ設定で始める**。
+        // グループ内のタスクは場所も優先度も揃っているのが普通で、
+        // 毎回入れ直させると結局そのまま既定値で入って設定が形骸化する。
+        loadDefaults(if (parentId != null && parentId >= 0) parentId else null) { parent ->
+            locationSpinner.setSelection(
+                locationValues.indexOf(parent.location).let { if (it >= 0) it else 0 }
+            )
+            prioritySlider.value = parent.priority
+            colorPalette.select(dev.togar.dynasched.api.CalColor.indexOfId(parent.color))
+            tagInput.setValue(parent.tags)
+            durationPicker.setMinutes(parent.durationMinutes)
+        }
 
         saveButton.setOnClickListener {
             val name = nameInput.text.toString().trim()
@@ -119,12 +131,25 @@ class AddTaskActivity : AppCompatActivity() {
     /** 「選ぶ」に出す既存タグ。読み込む前に押されても落ちないよう空で始める */
     private var knownTags: List<String> = emptyList()
 
-    private fun loadKnownTags() {
+    /**
+     * 既存タグの読み込みと、親からの引き継ぎ。
+     * どちらもDBを触るのでワーカーへ回す。読み込む前に触られても落ちない形にしてある。
+     */
+    private fun loadDefaults(
+        parentId: Long?,
+        onParent: (dev.togar.dynasched.api.HobbyItem) -> Unit
+    ) {
         val ctx = applicationContext
         Api.async(
-            work = { dev.togar.dynasched.ui.Tags.known(Repo.current(ctx).getHobby(ctx)) },
-            onSuccess = { knownTags = it },
-            onError = { /* 候補が出ないだけ。自由入力はできる */ }
+            work = {
+                val all = Repo.current(ctx).getHobby(ctx)
+                dev.togar.dynasched.ui.Tags.known(all) to all.firstOrNull { it.id == parentId }
+            },
+            onSuccess = { (tags, parent) ->
+                knownTags = tags
+                if (parent != null) onParent(parent)
+            },
+            onError = { /* 候補が出ないだけ。手で入れられる */ }
         )
     }
 }

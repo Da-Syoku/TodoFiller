@@ -29,6 +29,11 @@ class TagInputView(
     /** 保存する形（カンマ区切り） */
     val value: String get() = Tags.normalize(input.text.toString())
 
+    /** 外から差し替える（親タスクからの引き継ぎなど） */
+    fun setValue(raw: String) {
+        input.setText(Tags.display(raw))
+    }
+
     init {
         orientation = HORIZONTAL
         val chooser = Button(ctx).apply {

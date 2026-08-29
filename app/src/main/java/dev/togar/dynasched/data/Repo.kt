@@ -55,6 +55,21 @@ interface Repo {
     /** 優先度だけを変える（優先度順で並び替えたとき） */
     fun setHobbyPriority(ctx: Context, id: Long, priority: Int)
 
+    /**
+     * 親の設定を配下のタスクへまとめて適用する。null を渡した項目は触らない。
+     *
+     * グループ単位で「全部これ家でやる」「全部優先度を上げる」と決めたい場面のため。
+     * 1件ずつ開いて直すのは、10件もあれば現実的に続かない。
+     */
+    fun applyToSubtree(
+        ctx: Context, parentId: Long,
+        priority: Int? = null, location: String? = null,
+        color: String? = null, tags: String? = null
+    )
+
+    /** 1件だけ取る（子タスク追加時に親の設定を引き継ぐため） */
+    fun getHobbyItem(ctx: Context, id: Long): HobbyItem?
+
     fun getMaterials(ctx: Context): List<MaterialItem>
     fun addMaterial(ctx: Context, m: MaterialInput)
     fun editMaterial(ctx: Context, id: Long, m: MaterialInput)

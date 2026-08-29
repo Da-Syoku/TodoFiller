@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">スキマス</string>
+    <string name="widget_description">空き時間にできることを出します。「＋」でタスク追加、「暇」で条件を入れて提案。</string>
 </resources>

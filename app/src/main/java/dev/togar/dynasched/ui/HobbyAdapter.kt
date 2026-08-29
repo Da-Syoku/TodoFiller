@@ -142,12 +142,10 @@ class HobbyAdapter(
             holder.delete.visibility = View.VISIBLE
             holder.addChild.setOnClickListener { onAddChild(item) }
             holder.delete.setOnClickListener { onDelete(item) }
-            // 行のテキスト部分をタップで編集（葉タスクのみ。親はタップで畳む）
-            if (!row.hasChildren) {
-                holder.textContainer.setOnClickListener { onEdit(item) }
-            } else {
-                holder.textContainer.setOnClickListener { onCollapse(item) }
-            }
+            // 行のテキストをタップで編集。**親も編集できる**
+            // （畳むのは行頭の▾。親を編集できないと、グループ名を直すことも
+            //   配下へまとめて設定を配ることもできなかった）
+            holder.textContainer.setOnClickListener { onEdit(item) }
         }
         // 長押しはItemTouchHelperがそのまま「つかむ」に使う。
         // ここでリスナを付けると長押しを食ってしまうので付けない。

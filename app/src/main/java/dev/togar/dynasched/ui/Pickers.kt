@@ -44,8 +44,9 @@ class ColorPaletteView(context: Context, initialIndex: Int = 0) : GridLayout(con
         refresh()
     }
 
-    private fun select(i: Int) {
-        selectedIndex = i
+    /** 外から選択を差し替える（親タスクからの引き継ぎなど） */
+    fun select(i: Int) {
+        selectedIndex = i.coerceIn(0, CalColor.items.size - 1)
         refresh()
     }
 
@@ -79,6 +80,14 @@ class DurationPickerView(context: Context, initialMinutes: Int = 30) : LinearLay
 
     val totalMinutes: Int
         get() = hourPicker.value * 60 + minuteSteps[minutePicker.value]
+
+    /** 外から値を差し替える（親タスクからの引き継ぎなど）。15分刻みに丸める */
+    fun setMinutes(minutes: Int) {
+        val snapped = ((minutes.coerceIn(0, 30 * 60 + 45) + 7) / 15) * 15
+        hourPicker.value = (snapped / 60).coerceAtMost(30)
+        minutePicker.value = minuteSteps.indexOf(snapped % 60).let { if (it >= 0) it else 0 }
+        refreshTotal()
+    }
 
     init {
         orientation = HORIZONTAL
@@ -135,8 +144,14 @@ class LabeledSlider(
     private val seek = SeekBar(context)
     private val valueLabel = TextView(context)
 
-    val value: Int
+    var value: Int
         get() = values[seek.progress.coerceIn(0, values.size - 1)]
+        /** 外から値を差し替える（親タスクからの引き継ぎなど） */
+        set(v) {
+            val idx = values.indexOf(v)
+            seek.progress = if (idx >= 0) idx else values.size / 2
+            valueLabel.text = labelOf(value)
+        }
 
     init {
         orientation = HORIZONTAL

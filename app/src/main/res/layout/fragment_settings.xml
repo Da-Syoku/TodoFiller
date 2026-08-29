@@ -30,10 +30,19 @@
             android:textSize="15sp" />
 
         <Button
-            android:id="@+id/resyncButton"
+            android:id="@+id/helpButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
+            android:backgroundTint="@color/primary"
+            android:text="使い方を見る"
+            android:textColor="@color/white" />
+
+        <Button
+            android:id="@+id/resyncButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:backgroundTint="@color/primary"
             android:text="通知を再設定する"
             android:textColor="@color/white" />

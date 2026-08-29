@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -39,6 +40,19 @@
             android:textColor="@color/primary"
             android:textSize="12sp" />
     </LinearLayout>
+
+    <!-- グループ／タグを横に並べるタブ。設定で出さないこともできる。
+         塊を選んでいる間は全体が見えないので、階層をいじる操作は「すべて」タブだけ -->
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/taskTabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:tabMode="scrollable"
+        app:tabGravity="start"
+        app:tabIndicatorColor="@color/primary"
+        app:tabSelectedTextColor="@color/primary"
+        app:tabTextColor="@color/on_bg_dim" />
 
     <!-- タスク追加（専用画面へ遷移） -->
     <Button

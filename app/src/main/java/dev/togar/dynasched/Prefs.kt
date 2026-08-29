@@ -119,6 +119,27 @@ object Prefs {
         sp(ctx).edit().putBoolean("done_at_bottom", on).apply()
     }
 
+    /** 初回の使い方案内を見たか。人に渡した時、最初の1回だけ出すため */
+    fun helpShown(ctx: Context): Boolean = sp(ctx).getBoolean("help_shown", false)
+
+    fun setHelpShown(ctx: Context, shown: Boolean) {
+        sp(ctx).edit().putBoolean("help_shown", shown).apply()
+    }
+
+    /** タブの中身（TabSource の名前）。既定はタブを出さない */
+    fun taskTabSource(ctx: Context): String = sp(ctx).getString("task_tab_source", "NONE") ?: "NONE"
+
+    fun setTaskTabSource(ctx: Context, name: String) {
+        sp(ctx).edit().putString("task_tab_source", name).apply()
+    }
+
+    /** 選んでいるタブ。画面を離れて戻っても同じ場所に居られるように覚える */
+    fun taskTab(ctx: Context): String = sp(ctx).getString("task_tab", "") ?: ""
+
+    fun setTaskTab(ctx: Context, key: String) {
+        sp(ctx).edit().putString("task_tab", key).apply()
+    }
+
     /** 一覧を絞り込んでいるタグ。空なら絞らない */
     fun tagFilter(ctx: Context): Set<String> =
         sp(ctx).getStringSet("task_tag_filter", emptySet()).orEmpty()

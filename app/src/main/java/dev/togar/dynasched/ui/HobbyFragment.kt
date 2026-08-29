@@ -96,11 +96,16 @@ class HobbyFragment : Fragment() {
 
     private fun sortMode(): TaskSort = TaskSort.from(Prefs.taskSort(requireContext()))
 
+    private fun doneMode(): DoneMode = DoneMode.from(Prefs.taskDoneMode(requireContext()))
+
     private fun updateSortLabel() {
         val filter = Prefs.tagFilter(requireContext())
-        sortButton.text = if (filter.isEmpty()) shortLabel(sortMode())
+        // 完了を隠している間はそれを見せる。気付かないまま「終わったものが消えた」と
+        // 思わないように（実際には隠れているだけ）
+        val hidden = if (doneMode() == DoneMode.HIDDEN) " 済×" else ""
+        sortButton.text = if (filter.isEmpty()) shortLabel(sortMode()) + hidden
         // 絞り込み中はそれを最初に見せる。気付かないまま「タスクが消えた」と思うのを防ぐ
-        else "#${filter.first()}${if (filter.size > 1) "+${filter.size - 1}" else ""}"
+        else "#${filter.first()}${if (filter.size > 1) "+${filter.size - 1}" else ""}$hidden"
     }
 
     private fun shortLabel(s: TaskSort) = when (s) {
@@ -116,12 +121,14 @@ class HobbyFragment : Fragment() {
     private fun showViewMenu() {
         val ctx = requireContext()
         val sorts = TaskSort.entries
-        val doneBottom = Prefs.doneAtBottom(ctx)
+        val doneModes = DoneMode.entries
+        val curDone = doneMode()
         val filter = Prefs.tagFilter(ctx)
         val labels = sorts.map { if (it == sortMode()) "● ${it.label}" else "　${it.label}" } +
+            doneModes.map {
+                (if (it == curDone) "● " else "　") + "完了したものを${it.label}"
+            } +
             listOf(
-                if (doneBottom) "● 完了したものを下にまとめる" else "　完了したものを下にまとめる",
-                if (!doneBottom) "● 完了したものはその場に薄く残す" else "　完了したものはその場に薄く残す",
                 if (filter.isEmpty()) "　タグで絞り込む" else "● タグで絞り込む（${filter.size}個）",
                 "　横タブ: ${TabSource.from(Prefs.taskTabSource(ctx)).label}",
                 "　すべて畳む", "　すべて開く"
@@ -130,14 +137,15 @@ class HobbyFragment : Fragment() {
         AlertDialog.Builder(ctx)
             .setTitle("並び順と表示")
             .setItems(labels.toTypedArray()) { _, i ->
-                val extra = i - sorts.size   // 並び順の後ろに続く項目の番号
+                // 並び順 → 完了の見せ方 → その他、の順に並んでいる
+                val afterSort = i - sorts.size
+                val extra = afterSort - doneModes.size
                 when {
-                    extra < 0 -> Prefs.setTaskSort(ctx, sorts[i].name)
-                    extra == 0 -> Prefs.setDoneAtBottom(ctx, true)
-                    extra == 1 -> Prefs.setDoneAtBottom(ctx, false)
-                    extra == 2 -> { showTagFilter(); return@setItems }
-                    extra == 3 -> { showTabSource(); return@setItems }
-                    extra == 4 -> Prefs.setCollapsed(ctx, allParentIds())
+                    afterSort < 0 -> Prefs.setTaskSort(ctx, sorts[i].name)
+                    extra < 0 -> Prefs.setTaskDoneMode(ctx, doneModes[afterSort].name)
+                    extra == 0 -> { showTagFilter(); return@setItems }
+                    extra == 1 -> { showTabSource(); return@setItems }
+                    extra == 2 -> Prefs.setCollapsed(ctx, allParentIds())
                     else -> Prefs.setCollapsed(ctx, emptySet())
                 }
                 updateSortLabel()
@@ -266,11 +274,14 @@ class HobbyFragment : Fragment() {
         val tabKey = currentTab()
         val inTab = TaskTabs.apply(loaded, tabKey)
         val visible = Tags.filterTree(inTab, filter)
-        val rows = TaskList.build(visible, sortMode(), Prefs.collapsed(ctx), Prefs.doneAtBottom(ctx))
+        val mode = doneMode()
+        val rows = TaskList.build(visible, sortMode(), Prefs.collapsed(ctx), mode)
         adapter.submit(rows)
         empty.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
         empty.text = when {
             filter.isNotEmpty() -> "「#${filter.joinToString(" #")}」に当てはまるタスクはありません"
+            // 全部終わっている時に「タスクはありません」だと消えたように見える
+            mode == DoneMode.HIDDEN && visible.isNotEmpty() -> "残っているタスクはありません"
             tabKey != TaskTabs.ALL -> "この中にタスクはありません"
             else -> "タスクはありません"
         }

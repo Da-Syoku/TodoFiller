@@ -36,21 +36,21 @@ class TaskListTest {
 
     @Test
     fun `手動の並びは保存した順`() {
-        val r = TaskList.build(flat, TaskSort.MANUAL, emptySet(), false)
+        val r = TaskList.build(flat, TaskSort.MANUAL, emptySet(), DoneMode.INLINE)
         assertEquals("中間,新しい,古い", names(r))
     }
 
     @Test
     fun `追加が新しい順と古い順`() {
-        assertEquals("新しい,中間,古い", names(TaskList.build(flat, TaskSort.NEWEST, emptySet(), false)))
-        assertEquals("古い,中間,新しい", names(TaskList.build(flat, TaskSort.OLDEST, emptySet(), false)))
+        assertEquals("新しい,中間,古い", names(TaskList.build(flat, TaskSort.NEWEST, emptySet(), DoneMode.INLINE)))
+        assertEquals("古い,中間,新しい", names(TaskList.build(flat, TaskSort.OLDEST, emptySet(), DoneMode.INLINE)))
     }
 
     @Test
     fun `優先度と必要時間で並べられる`() {
-        assertEquals("中間,新しい,古い", names(TaskList.build(flat, TaskSort.PRIORITY, emptySet(), false)))
-        assertEquals("古い,新しい,中間", names(TaskList.build(flat, TaskSort.LONGEST, emptySet(), false)))
-        assertEquals("中間,新しい,古い", names(TaskList.build(flat, TaskSort.SHORTEST, emptySet(), false)))
+        assertEquals("中間,新しい,古い", names(TaskList.build(flat, TaskSort.PRIORITY, emptySet(), DoneMode.INLINE)))
+        assertEquals("古い,新しい,中間", names(TaskList.build(flat, TaskSort.LONGEST, emptySet(), DoneMode.INLINE)))
+        assertEquals("中間,新しい,古い", names(TaskList.build(flat, TaskSort.SHORTEST, emptySet(), DoneMode.INLINE)))
     }
 
     // ---- 完了の扱い ----
@@ -62,7 +62,7 @@ class TaskListTest {
             task(2, "未B", priority = 3),
             task(3, "未C", priority = 5)
         )
-        assertEquals("未C,未B,済A", names(TaskList.build(list, TaskSort.PRIORITY, emptySet(), true)))
+        assertEquals("未C,未B,済A", names(TaskList.build(list, TaskSort.PRIORITY, emptySet(), DoneMode.BOTTOM)))
     }
 
     @Test
@@ -71,7 +71,54 @@ class TaskListTest {
             task(1, "済A", done = true, priority = 8),
             task(2, "未B", priority = 3)
         )
-        assertEquals("済A,未B", names(TaskList.build(list, TaskSort.PRIORITY, emptySet(), false)))
+        assertEquals("済A,未B", names(TaskList.build(list, TaskSort.PRIORITY, emptySet(), DoneMode.INLINE)))
+    }
+
+    @Test
+    fun `隠す指定なら完了したものは行に出ない`() {
+        val list = listOf(
+            task(1, "済A", done = true),
+            task(2, "未B"),
+            task(3, "済C", done = true)
+        )
+        assertEquals("未B", names(TaskList.build(list, TaskSort.MANUAL, emptySet(), DoneMode.HIDDEN)))
+    }
+
+    @Test
+    fun `配下が全部済んだ親も隠す`() {
+        // 残すと、中身が空の見出しだけが並んで「終わったのに片付かない」状態になる
+        val list = listOf(
+            task(1, "済んだ班"),
+            task(2, "子1", parent = 1, done = true),
+            task(3, "子2", parent = 1, done = true),
+            task(4, "残った班"),
+            task(5, "子3", parent = 4, done = true),
+            task(6, "子4", parent = 4)
+        )
+        assertEquals(
+            "残った班,  子4",
+            names(TaskList.build(list, TaskSort.MANUAL, emptySet(), DoneMode.HIDDEN))
+        )
+    }
+
+    @Test
+    fun `全部済んでいれば何も出ない`() {
+        val list = listOf(task(1, "済A", done = true))
+        assertTrue(TaskList.build(list, TaskSort.MANUAL, emptySet(), DoneMode.HIDDEN).isEmpty())
+    }
+
+    @Test
+    fun `隠していても未完了は木の形を保つ`() {
+        val list = listOf(
+            task(1, "親"),
+            task(2, "子", parent = 1, done = true),
+            task(3, "孫のいる子", parent = 1),
+            task(4, "孫", parent = 3)
+        )
+        assertEquals(
+            "親,  孫のいる子,    孫",
+            names(TaskList.build(list, TaskSort.MANUAL, emptySet(), DoneMode.HIDDEN))
+        )
     }
 
     // ---- 階層と折りたたみ ----
@@ -86,19 +133,19 @@ class TaskListTest {
 
     @Test
     fun `階層は深さ優先で段付きになる`() {
-        assertEquals("親,  子1,    孫,  子2,単独", names(TaskList.build(tree, TaskSort.MANUAL, emptySet(), false)))
+        assertEquals("親,  子1,    孫,  子2,単独", names(TaskList.build(tree, TaskSort.MANUAL, emptySet(), DoneMode.INLINE)))
     }
 
     @Test
     fun `畳んだ親は1行になって配下が消える`() {
-        val r = TaskList.build(tree, TaskSort.MANUAL, setOf(1L), false)
+        val r = TaskList.build(tree, TaskSort.MANUAL, setOf(1L), DoneMode.INLINE)
         assertEquals("親,単独", names(r))
         assertTrue(r.first().collapsed)
     }
 
     @Test
     fun `畳んだ親の要約は配下の葉を数える`() {
-        val r = TaskList.build(tree, TaskSort.MANUAL, setOf(1L), false)
+        val r = TaskList.build(tree, TaskSort.MANUAL, setOf(1L), DoneMode.INLINE)
         // 葉は「孫(20分)」と「子2(60分・済)」の2件。子1は親なので数えない
         assertEquals("2件（済1）・1時間20分", r.first().summary())
     }
@@ -106,14 +153,14 @@ class TaskListTest {
     @Test
     fun `親が消えた子はルートとして出す`() {
         val orphan = listOf(task(5, "孤児", parent = 99))
-        assertEquals("孤児", names(TaskList.build(orphan, TaskSort.MANUAL, emptySet(), false)))
+        assertEquals("孤児", names(TaskList.build(orphan, TaskSort.MANUAL, emptySet(), DoneMode.INLINE)))
     }
 
     @Test
     fun `親子が輪になっても一覧は返る`() {
         // 壊れたデータで無限ループに入ると、アプリが二度と開かなくなる
         val loop = listOf(task(1, "A", parent = 2), task(2, "B", parent = 1))
-        val r = TaskList.build(loop, TaskSort.MANUAL, emptySet(), false)
+        val r = TaskList.build(loop, TaskSort.MANUAL, emptySet(), DoneMode.INLINE)
         assertTrue("行が出ない", r.size <= 2)
     }
 
@@ -128,7 +175,7 @@ class TaskListTest {
 
     @Test
     fun `同じ段に落とせば並びだけが変わる`() {
-        val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), false)   // 中間,新しい,古い
+        val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), DoneMode.INLINE)   // 中間,新しい,古い
         val after = moved(rows, 2, 0)                                        // 古い,中間,新しい
         val drop = TaskList.dropTarget(after, flat, 0, 0)!!
         assertNull(drop.parentId)
@@ -137,7 +184,7 @@ class TaskListTest {
 
     @Test
     fun `1段深くすると上の行の子になる`() {
-        val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), false)   // 中間,新しい,古い
+        val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), DoneMode.INLINE)   // 中間,新しい,古い
         val drop = TaskList.dropTarget(rows, flat, 1, 1)!!
         assertEquals("すぐ上の「中間」の子になる", 2L, drop.parentId)
         assertEquals(1, drop.level)
@@ -145,7 +192,7 @@ class TaskListTest {
 
     @Test
     fun `上に行が無ければ深くできない`() {
-        val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), false)
+        val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), DoneMode.INLINE)
         val drop = TaskList.dropTarget(rows, flat, 0, 3)!!
         assertNull("先頭は誰の子にもなれない", drop.parentId)
         assertEquals(0, drop.level)
@@ -154,13 +201,13 @@ class TaskListTest {
     @Test
     fun `2段以上は飛べない`() {
         // 「中間」(0段) の下に「新しい」を3段目で落としても、2段目までしか入れない
-        val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), false)
+        val rows = TaskList.build(flat, TaskSort.MANUAL, emptySet(), DoneMode.INLINE)
         assertEquals(1, TaskList.dropTarget(rows, flat, 1, 3)!!.level)
     }
 
     @Test
     fun `段を0にすれば子をやめて最上位に戻る`() {
-        val rows = TaskList.build(tree, TaskSort.MANUAL, emptySet(), false)
+        val rows = TaskList.build(tree, TaskSort.MANUAL, emptySet(), DoneMode.INLINE)
         val magoIndex = rows.indexOfFirst { it.item.name == "孫" }
         val drop = TaskList.dropTarget(rows, tree, magoIndex, 0)!!
         assertNull(drop.parentId)
@@ -169,7 +216,7 @@ class TaskListTest {
     @Test
     fun `自分の子孫の中には落とせない`() {
         // 「親」を「孫」の下（2段目）へ落とそうとする。許すと木が輪になって一覧が出なくなる
-        val rows = TaskList.build(tree, TaskSort.MANUAL, emptySet(), false)
+        val rows = TaskList.build(tree, TaskSort.MANUAL, emptySet(), DoneMode.INLINE)
         val after = moved(rows, 0, 2)
         val drop = TaskList.dropTarget(after, tree, 2, 2)
         assertTrue(
@@ -181,7 +228,7 @@ class TaskListTest {
     @Test
     fun `畳んで見えていない兄弟も並びから漏らさない`() {
         // 「親」を畳んだ状態で「単独」をその子にする。子1・子2は行に出ていない
-        val rows = TaskList.build(tree, TaskSort.MANUAL, setOf(1L), false)   // 親,単独
+        val rows = TaskList.build(tree, TaskSort.MANUAL, setOf(1L), DoneMode.INLINE)   // 親,単独
         val drop = TaskList.dropTarget(rows, tree, 1, 1)!!
         assertEquals(1L, drop.parentId)
         assertEquals(
@@ -196,7 +243,7 @@ class TaskListTest {
             task(1, "高1", priority = 8), task(2, "高2", priority = 8),
             task(3, "低", priority = 3)
         )
-        val rows = TaskList.build(list, TaskSort.PRIORITY, emptySet(), false)
+        val rows = TaskList.build(list, TaskSort.PRIORITY, emptySet(), DoneMode.INLINE)
         // 「低」を先頭（高の塊の中）へ持っていく
         assertEquals(8, TaskList.priorityAfterMove(rows, 3L, 1))
         // 末尾へ戻せば下の隣に合わせる（隣が無ければ上の隣）

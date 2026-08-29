@@ -32,7 +32,7 @@ object Backup {
     private val TABLES = listOf("materials", "attempts", "hobby_tasks")
 
     /** 一緒に控える設定。カレンダーIDは端末ごとに違うので入れない */
-    private val PREF_KEYS = listOf("fill_days", "task_sort", "done_at_bottom")
+    private val PREF_KEYS = listOf("fill_days", "task_sort", "task_done_mode")
 
     data class Report(val materials: Int, val attempts: Int, val hobbies: Int)
 
@@ -82,7 +82,7 @@ object Backup {
         val o = JSONObject()
         o.put("fill_days", Prefs.fillDays(ctx))
         o.put("task_sort", Prefs.taskSort(ctx))
-        o.put("done_at_bottom", Prefs.doneAtBottom(ctx))
+        o.put("task_done_mode", Prefs.taskDoneMode(ctx))
         return o
     }
 
@@ -164,7 +164,7 @@ object Backup {
             when (key) {
                 "fill_days" -> Prefs.setFillDays(ctx, o.optInt(key, 7))
                 "task_sort" -> Prefs.setTaskSort(ctx, o.optString(key, "MANUAL"))
-                "done_at_bottom" -> Prefs.setDoneAtBottom(ctx, o.optBoolean(key, false))
+                "task_done_mode" -> Prefs.setTaskDoneMode(ctx, o.optString(key, "INLINE"))
             }
         }
     }

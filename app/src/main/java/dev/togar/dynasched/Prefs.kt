@@ -110,13 +110,19 @@ object Prefs {
     }
 
     /**
-     * 完了したタスクを下にまとめるか。false なら**その場に半透明で残す**。
-     * どちらが良いかは使ってみないと分からない類なので、両方残して切り替える。
+     * 完了したタスクの見せ方（DoneMode の名前）。
+     *
+     * 以前は「下にまとめる／その場に残す」の2択だった。設定が残っている端末が
+     * あるので、新しいキーが無ければ古い真偽値から読み替える。
      */
-    fun doneAtBottom(ctx: Context): Boolean = sp(ctx).getBoolean("done_at_bottom", false)
+    fun taskDoneMode(ctx: Context): String {
+        val p = sp(ctx)
+        p.getString("task_done_mode", null)?.let { return it }
+        return if (p.getBoolean("done_at_bottom", false)) "BOTTOM" else "INLINE"
+    }
 
-    fun setDoneAtBottom(ctx: Context, on: Boolean) {
-        sp(ctx).edit().putBoolean("done_at_bottom", on).apply()
+    fun setTaskDoneMode(ctx: Context, name: String) {
+        sp(ctx).edit().putString("task_done_mode", name).apply()
     }
 
     /** 初回の使い方案内を見たか。人に渡した時、最初の1回だけ出すため */

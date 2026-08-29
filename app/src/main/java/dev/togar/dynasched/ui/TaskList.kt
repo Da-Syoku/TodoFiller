@@ -28,6 +28,22 @@ enum class TaskSort(val label: String) {
     }
 }
 
+/**
+ * 完了したタスクの見せ方。
+ *
+ * どれが良いかは使い方で変わる（済んだものを実績として見たい人と、
+ * 残りだけ見たい人がいる）ので、選べるようにしてある。
+ */
+enum class DoneMode(val label: String) {
+    INLINE("その場に薄く残す"),
+    BOTTOM("下にまとめる"),
+    HIDDEN("隠す");
+
+    companion object {
+        fun from(name: String?): DoneMode = entries.firstOrNull { it.name == name } ?: INLINE
+    }
+}
+
 /** 画面に出す1行 */
 data class TaskRow(
     val item: HobbyItem,
@@ -55,9 +71,52 @@ object TaskList {
      * 一覧を組む。
      *
      * @param collapsed 折りたたんでいる親のID。配下は行として出さない
-     * @param doneAtBottom 完了したものを兄弟の末尾へ寄せる。false ならその場に半透明で残す
+     * @param doneMode 完了したものをどう扱うか
      */
     fun build(
+        all: List<HobbyItem>,
+        sort: TaskSort,
+        collapsed: Set<Long>,
+        doneMode: DoneMode
+    ): List<TaskRow> {
+        val source = if (doneMode == DoneMode.HIDDEN) withoutDone(all) else all
+        val doneAtBottom = doneMode == DoneMode.BOTTOM
+        return buildTree(source, sort, collapsed, doneAtBottom)
+    }
+
+    /**
+     * 完了したものを取り除く。
+     *
+     * **配下が全部済んだ親も一緒に消す。** 残すと、中身が空の見出しだけが
+     * 並んで「終わったのに片付かない」状態になる。親自身は完了できないので、
+     * 子孫がすべて消えたかどうかで判断する。
+     */
+    private fun withoutDone(all: List<HobbyItem>): List<HobbyItem> {
+        val byParent = all.groupBy { it.parentId }
+        val keep = HashSet<Long>()
+
+        fun visit(item: HobbyItem, seen: MutableSet<Long>): Boolean {
+            if (!seen.add(item.id)) return false
+            val kids = byParent[item.id].orEmpty()
+            if (kids.isEmpty()) {
+                if (item.isCompleted) return false
+                keep.add(item.id)
+                return true
+            }
+            var any = false
+            for (k in kids) if (visit(k, seen)) any = true
+            if (any) keep.add(item.id)
+            return any
+        }
+
+        val existing = all.mapTo(HashSet()) { it.id }
+        for (r in all) {
+            if (r.parentId == null || !existing.contains(r.parentId)) visit(r, HashSet())
+        }
+        return all.filter { keep.contains(it.id) }
+    }
+
+    private fun buildTree(
         all: List<HobbyItem>,
         sort: TaskSort,
         collapsed: Set<Long>,

@@ -1,0 +1,6 @@
+{
+  "version_code": 34,
+  "version_name": "34.0",
+  "url": "https://raw.githubusercontent.com/togarinozawa/TodoFiller/dist/skimas34.apk",
+  "notes": "使い方の説明を追加（初回に出ます／設定からいつでも）。ウィジェットを大きくして候補6件＋タスク追加ボタン。グループの設定を配下へまとめて適用、子タスクは親の設定で始まる。グループ／タグの横タブ。完了したタスクを隠すモード。"
+}
